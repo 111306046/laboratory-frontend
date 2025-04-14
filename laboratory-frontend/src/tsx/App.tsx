@@ -10,6 +10,10 @@ function App() {
         <Route path="/" element={<Navigate to="/login" />} />
         <Route path="/register" element={<Register />} />
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+        <Route path="/login" element={<Login />} />
+>>>>>>> Stashed changes
 =======
         <Route path="/login" element={<Login />} />
 >>>>>>> Stashed changes

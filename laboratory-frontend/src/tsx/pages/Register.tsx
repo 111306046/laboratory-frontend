@@ -1,41 +1,103 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 
-const Register = () => {
-  const [username, setUsername] = useState('');
+const Register: React.FC = () => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleRegister = () => {
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!email || !password) {
+      setError('請填寫所有欄位');
+      return;
+    }
+
     const users = JSON.parse(localStorage.getItem('users') || '{}');
-    if (users[username]) return alert('使用者已存在');
-    users[username] = { password };
-    localStorage.setItem('users', JSON.stringify(users));
-    alert('註冊成功');
+    if (users[email]) {
+      setError('此帳號已被註冊');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      // 模擬 API 延遲
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      users[email] = { password };
+      localStorage.setItem('users', JSON.stringify(users));
+
+      alert('註冊成功！請登入');
+      navigate('/login');
+    } catch (err) {
+      setError('註冊失敗，請稍後再試');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-black/30 backdrop-blur-sm">
-      <div className="bg-white/80 p-8 rounded shadow-md w-80">
-        <h2 className="text-xl font-bold mb-4 text-center">註冊帳號</h2>
-        <input
-          type="text"
-          placeholder="帳號"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          className="w-full p-2 mb-2 border border-gray-300 rounded"
-        />
-        <input
-          type="password"
-          placeholder="密碼"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full p-2 mb-4 border border-gray-300 rounded"
-        />
-        <button
-          onClick={handleRegister}
-          className="bg-green-500 text-white px-4 py-2 rounded w-full"
-        >
-          註冊
-        </button>
+      <div className="max-w-md w-full p-6 bg-white rounded-lg shadow-md">
+        <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">註冊帳號</h2>
+
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label htmlFor="email" className="block text-gray-700 text-sm font-bold mb-2">
+              e-mail
+            </label>
+            <input
+              id="email"
+              type="email"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="請輸入電子郵件"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="mb-6">
+            <label htmlFor="password" className="block text-gray-700 text-sm font-bold mb-2">
+              密碼
+            </label>
+            <input
+              id="password"
+              type="password"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="請輸入密碼"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
+            disabled={isLoading}
+          >
+            {isLoading ? '註冊中...' : '註冊'}
+          </button>
+        </form>
+
+        <div className="mt-4 text-center">
+          <p className="text-sm text-gray-600">
+            已經有帳號了嗎？ <Link to="/login" className="text-blue-600 hover:underline">回到登入</Link>
+          </p>
+        </div>
       </div>
     </div>
   );

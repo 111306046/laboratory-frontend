@@ -11,32 +11,48 @@ const Register: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!email || !password) {
       setError('請填寫所有欄位');
       return;
     }
-
-    const users = JSON.parse(localStorage.getItem('users') || '{}');
-    if (users[email]) {
-      setError('此帳號已被註冊');
-      return;
-    }
-
+  
     setIsLoading(true);
     setError('');
-
+  
     try {
-      // 模擬 API 延遲
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      users[email] = { password };
-      localStorage.setItem('users', JSON.stringify(users));
-
-      alert('註冊成功！請登入');
-      navigate('/login');
+      
+      // 確保請求體的格式與後端期望的完全匹配
+      const response = await fetch('http://127.0.0.1:8787/api/createUser', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          account: email, // 確保字段名是 account 而不是 email
+          password: password 
+        }),
+      });
+      
+  
+      // 檢查響應是否為 JSON
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.message || '註冊失敗');
+        }
+        
+        alert('註冊成功！請登入');
+        navigate('/login');
+      } else {
+        const text = await response.text();
+        console.error('Non-JSON response:', text);
+        throw new Error('伺服器回應格式錯誤');
+      }
     } catch (err) {
-      setError('註冊失敗，請稍後再試');
+      console.error('Registration error:', err);
+      setError(err instanceof Error ? err.message : '註冊失敗，請稍後再試');
     } finally {
       setIsLoading(false);
     }

@@ -24,20 +24,34 @@ const Login: React.FC = () => {
     setError('');
     
     try {
-      // 模擬api
-      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      console.log('登入成功:', { email, password });
+      //調用api
+      const response = await fetch('http://127.0.0.1:8787/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          account: email,  // *後端API使用'account'
+          password: password
+        })
+      });
       
-      // 存儲登入狀態
-      localStorage.setItem('token', 'dummy_token');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '登入失敗');
+      }
       
-      // 登錄成功導到dashboard
+      const data = await response.json();
+      
+      // 存儲登入token
+      localStorage.setItem('token', data.access_token);
+      
+      // 登入成功導到主頁
       navigate('/dashboard');
-      
     } catch (err) {
-      setError('登入失敗');
-      console.error('登入錯誤:', err);
+      setError(err instanceof Error ? err.message : '登入失敗');
+      console.error('登入失敗:', err);
     } finally {
       setIsLoading(false);
     }

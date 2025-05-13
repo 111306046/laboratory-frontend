@@ -93,7 +93,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
           </div>
           {sidebarOpen && (
             <div className="ml-3">
-              <p className="text-base font-medium">張三</p>
+              <p className="text-base font-medium">大張</p>
               <p className="text-sm text-blue-200">管理員</p>
             </div>
           )}

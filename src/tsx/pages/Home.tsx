@@ -92,7 +92,7 @@ const Home: React.FC = () => {
     return () => clearInterval(intervalId);
   }, []);
 
-  // 只返回主內容，不包含側邊欄
+  // 返回主內容
   return (
     <>
       {/* 頂部標題欄 */}

@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 
 const Login: React.FC = () => {
   // 添加狀態管理
-  const [email, setEmail] = useState('');
+  const [account, setAccount] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -15,10 +15,10 @@ const Login: React.FC = () => {
     e.preventDefault();
     
     // 簡單驗證
-    if (!email || !password) {
-      setError('請填寫email');
-      return;
-    }
+    // if (!email || !password) {
+    //   setError('請填寫email');
+    //   return;
+    // }
     
     setIsLoading(true);
     setError('');
@@ -27,7 +27,21 @@ const Login: React.FC = () => {
       // 模擬api
       await new Promise(resolve => setTimeout(resolve, 1000));
       
+<<<<<<< Updated upstream:laboratory-frontend/src/tsx/pages/Login.tsx
       console.log('登入成功:', { email, password });
+=======
+      //調用api
+      const response = await fetch('http://13.211.240.55/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          account: account,  // *後端API使用'account'
+          password: password
+        })
+      });
+>>>>>>> Stashed changes:src/tsx/pages/Login.tsx
       
       // 存儲登入狀態
       localStorage.setItem('token', 'dummy_token');
@@ -56,16 +70,24 @@ const Login: React.FC = () => {
         
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label htmlFor="email" className="block text-gray-700 text-sm font-bold mb-2">
-              e-mail
+            <label htmlFor="account" className="block text-gray-700 text-sm font-bold mb-2">
+              account
             </label>
             <input
-              id="email"
-              type="email"
+              id="account"
+              name="account"
+              type="text"
+              autoComplete="off"  // 關閉自動完成
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+<<<<<<< Updated upstream:laboratory-frontend/src/tsx/pages/Login.tsx
               placeholder="f請輸入e-mail"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+=======
+              placeholder="請輸入帳號"
+              value={account}
+              onChange={(e) => setAccount(e.target.value)}
+>>>>>>> Stashed changes:src/tsx/pages/Login.tsx
               required
             />
           </div>

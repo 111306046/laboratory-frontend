@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 
 const Login: React.FC = () => {
   // 添加狀態管理
-  const [email, setEmail] = useState('');
+  const [account, setAccount] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -15,8 +15,8 @@ const Login: React.FC = () => {
     e.preventDefault();
     
     // 簡單驗證
-    if (!email || !password) {
-      setError('請填寫email');
+    if (!account || !password) {
+      setError('請填寫帳號');
       return;
     }
     
@@ -32,7 +32,7 @@ const Login: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          account: email,  // *後端API使用'account'
+          account: account,  // *後端API使用'account'
           password: password
         })
       });
@@ -70,16 +70,16 @@ const Login: React.FC = () => {
         
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label htmlFor="email" className="block text-gray-700 text-sm font-bold mb-2">
-              e-mail
+            <label htmlFor="account" className="block text-gray-700 text-sm font-bold mb-2">
+              帳號
             </label>
             <input
-              id="email"
-              type="email"
+              id="accoint"
+              type="account"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="請輸入e-mail"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder="請輸入帳號"
+              value={account}
+              onChange={(e) => setAccount(e.target.value)}
               required
             />
           </div>

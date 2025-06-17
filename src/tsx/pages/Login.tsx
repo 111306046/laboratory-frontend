@@ -26,7 +26,7 @@ const Login: React.FC = () => {
     try {
       
       //調用api
-      const response = await fetch('http://127.0.0.1:8787/api/login', {
+      const response = await fetch('http://13.211.240.55/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

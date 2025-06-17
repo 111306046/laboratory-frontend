@@ -22,7 +22,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     { title: '數據記錄', path: '/data-records', icon: <FiDatabase size={20} /> },
     { title: '警報設置', path: '/alerts', icon: <FiAlertCircle size={20} /> },
     { title: '統計圖表', path: '/statistics', icon: <FiBarChart2 size={20} /> },
-    { title: '用戶管理', path: '/users', icon: <FiUser size={20} /> },
+    { title: '用戶管理', path: '/PU-addusers', icon: <FiUser size={20} /> },
     { title: '系統設置', path: '/settings', icon: <FiSettings size={20} /> }
   ];
 

@@ -4,7 +4,7 @@ import Login from './pages/Login';
 import Home from './pages/Home';
 import Datarecords from './pages/data-records';
 import Layout from './components/layout';
-
+import AddUser from './pages/PU-adduser'
 
 
 function App() {
@@ -17,6 +17,7 @@ function App() {
         <Route path="/home" element={<Home />} />
         <Route path="/data-records" element={<Layout><Datarecords /></Layout>} />
         <Route path="/dashboard" element={<Layout><Home /></Layout>} />
+        <Route path="/PU-addusers" element={<Layout><AddUser /></Layout>} />
       </Routes>
     </BrowserRouter>
   );

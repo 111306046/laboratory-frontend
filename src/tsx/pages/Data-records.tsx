@@ -115,7 +115,7 @@ const DataRecords: React.FC = () => {
     <>
       {/* 頂部標題欄 */}
       <div className="bg-white shadow-sm p-4 flex justify-between items-center">
-        <h1 className="text-xl font-medium">數據記錄</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">數據記錄</h1>
         <div className="flex items-center space-x-2">
           <button
             onClick={handleRefresh}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, UserPlus, Shield, Edit, Trash2, Eye, ChevronDown, Filter } from 'lucide-react';
 
-const PUAdduser = () => {
+const AdminManagement = () => {
   const [users, setUsers] = useState([
     { 
       id: 1, 
@@ -563,4 +563,4 @@ const handleCancelEdit = () => {
 
 
 
-export default PUAdduser;
+export default AdminManagement;

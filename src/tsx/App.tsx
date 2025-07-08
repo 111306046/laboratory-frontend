@@ -2,11 +2,11 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Register from './pages/Register';
 import Login from './pages/Login';
 import Home from './pages/Home';
-import DataRecords from './pages/Data-records';
-import Layout from './components/Layout';
-import AddUser from './pages/PU-adduser';
+import Datarecords from './pages/data-records';
+import Layout from './components/layout';
+import AddUser from './pages/PU-adduser'
 import LaboratoryManagement from './pages/PU-LaborataryMnagement';
-import ProtectedRoute from './components/ProtectedRoute';
+
 
 function App() {
   return (
@@ -16,10 +16,10 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
         <Route path="/home" element={<Home />} />
-        <Route path="/data-records" element={<ProtectedRoute><Layout><DataRecords /></Layout></ProtectedRoute>} />
-        <Route path="/dashboard" element={<ProtectedRoute><Layout><Home /></Layout></ProtectedRoute>} />
-        <Route path="/PU-addusers" element={<ProtectedRoute><Layout><AddUser /></Layout></ProtectedRoute>} />
-        <Route path="/PU-laboratarymnagement" element={<ProtectedRoute><Layout><LaboratoryManagement /></Layout></ProtectedRoute>} />
+        <Route path="/data-records" element={<Layout><Datarecords /></Layout>} />
+        <Route path="/dashboard" element={<Layout><Home /></Layout>} />
+        <Route path="/PU-addusers" element={<Layout><AddUser /></Layout>} />
+        <Route path="/PU-laboratarymnagement" element={<Layout><LaboratoryManagement /></Layout>} />
       </Routes>
     </BrowserRouter>
   );

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { login } from '../api/api';
 
 const Login: React.FC = () => {
   // 添加狀態管理
@@ -27,33 +26,28 @@ const Login: React.FC = () => {
     try {
       
       //調用api
-      // const response = await fetch('http://13.211.240.55/api/login', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //   },
-      //   body: JSON.stringify({
-      //     account: account,  // *後端API使用'account'
-      //     password: password
-      //   })
-      // });
-      // 
-      // if (!response.ok) {
-      //   const errorData = await response.json();
-      //   throw new Error(errorData.detail || '登入失敗');
-      // }
-      // 
-      // const data = await response.json();
-      // 
-      // // 存儲登入token
-      // localStorage.setItem('token', data.access_token);
-      // 
-      // // 登入成功導到主頁
-      // navigate('/dashboard');
-      // 改為 axios 版本
-      const response = await login(account, password);
-      const data = response.data;
-      localStorage.setItem('access_token', data.access_token);
+      const response = await fetch('http://13.211.240.55/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          account: account,  // *後端API使用'account'
+          password: password
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '登入失敗');
+      }
+      
+      const data = await response.json();
+      
+      // 存儲登入token
+      localStorage.setItem('token', data.access_token);
+      
+      // 登入成功導到主頁
       navigate('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : '登入失敗');

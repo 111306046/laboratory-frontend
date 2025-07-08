@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { getLabs } from '../api/api';
 
 // 保留數據介面定義
 interface LabData {
@@ -31,15 +30,66 @@ const Home: React.FC = () => {
     const fetchLabData = async () => {
       try {
         setIsLoading(true);
-        const response = await getLabs();
-        setLabData(response.data); // 假設 response.data 是你要的資料
-      } catch (error) {
-        // 處理錯誤
+        // 需要替換成實際的API地址
+        const response = await fetch('http://your-server-address:port/api/lab-data', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error('無法獲取實驗室數據');
+        }
+        
+        // 檢查內容類型
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('伺服器返回的不是JSON格式');
+        }
+        
+        // 檢查回應是否為空
+        const text = await response.text();
+        if (!text) {
+          throw new Error('伺服器返回空回應');
+        }
+        
+        // 安全地解析JSON
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (parseError) {
+          console.error('JSON解析錯誤:', parseError, '原始文本:', text);
+          throw new Error('無法解析JSON回應');
+        }
+        
+        // 設置數據
+        setLabData({
+          co2: data.co2 ?? 0,
+          o2: data.o2 ?? 0,
+          ch2o: data.ch2o ?? 0,
+          co: data.co ?? 0,
+          nh3: data.nh3 ?? 0,
+          humidity: data.humidity ?? 0,
+          o3: data.o3 ?? 0
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '獲取數據失敗');
+        console.error('獲取數據失敗:', err);
       } finally {
         setIsLoading(false);
       }
     };
+
     fetchLabData();
+    
+    // 設置定時器每分鐘更新一次數據
+    const intervalId = setInterval(fetchLabData, 60000);
+    
+    // 清除effect
+    return () => clearInterval(intervalId);
   }, []);
 
   // 返回主內容

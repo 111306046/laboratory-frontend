@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const PU_LaborataryMnagement = () => {
+const LaboratoryManagement = () => {
   const [laboratories, setLaboratories] = useState([
     {
       id: 1,
@@ -637,4 +637,4 @@ const PU_LaborataryMnagement = () => {
   );
 };
 
-export default PU_LaborataryMnagement;
+export default LaboratoryManagement;

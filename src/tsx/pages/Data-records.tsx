@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FiSearch, FiCalendar, FiDownload, FiRefreshCw } from 'react-icons/fi';
+import { getDataRecords } from '../api/api';
 
 // 數據記錄介面定義
 interface DataRecord {
@@ -15,7 +16,7 @@ interface DataRecord {
   status: 'normal' | 'warning' | 'critical';
 }
 
-const DataRecords: React.FC = () => {
+const DataRecords = () => {
   // 狀態管理
   const [records, setRecords] = useState<DataRecord[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -46,24 +47,10 @@ const DataRecords: React.FC = () => {
           status: statusFilter === 'all' ? '' : statusFilter
         });
         
-        const response = await fetch(`http://your-server-address:port/api/data-records?${queryParams}`, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-        
-        if (!response.ok) {
-          throw new Error('無法獲取數據記錄');
-        }
-        
-        const data = await response.json();
-        setRecords(data.records || []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '獲取數據失敗');
-        console.error('獲取數據記錄失敗:', err);
+        const response = await getDataRecords(queryParams); // 假設 queryParams 是查詢參數
+        setRecords(response.data);
+      } catch (error) {
+        // 處理錯誤
       } finally {
         setIsLoading(false);
       }

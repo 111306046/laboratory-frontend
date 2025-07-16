@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 const Register: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [company, setCompany] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -11,7 +12,7 @@ const Register: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
+    if (!email || !password || !company) {
       setError('請填寫所有欄位');
       return;
     }
@@ -22,14 +23,16 @@ const Register: React.FC = () => {
     try {
       
       // 確保請求體的格式與後端期望的完全匹配
-      const response = await fetch('http://127.0.0.1:8787/api/createUser', {
+      const response = await fetch('http://13.211.240.55/api/createUser', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           account: email, // 確保字段名是 account 而不是 email
-          password: password 
+          password: password,
+          func_permissions: [], // 默認空權限
+          company: company
         }),
       });
       
@@ -96,6 +99,21 @@ const Register: React.FC = () => {
               placeholder="請輸入密碼"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="mb-6">
+            <label htmlFor="company" className="block text-gray-700 text-sm font-bold mb-2">
+              公司/組織
+            </label>
+            <input
+              id="company"
+              type="text"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="請輸入公司或組織名稱"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
               required
             />
           </div>

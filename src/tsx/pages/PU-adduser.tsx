@@ -1,156 +1,281 @@
 import React, { useState, useEffect } from 'react';
 import { Search, UserPlus, Shield, Edit, Trash2, Eye, ChevronDown, Filter } from 'lucide-react';
 
+// 定義用戶介面 - 根據後端API結構調整
+interface User {
+  account: string;
+  func_permissions: string[];
+  company: string;
+}
+
+// 定義新用戶介面
+interface NewUser {
+  account: string;
+  password: string;
+  func_permissions: string[];
+  company: string;
+}
+
 const AdminManagement = () => {
-  const [users, setUsers] = useState([
-    { 
-      id: 1, 
-      name: 'Alice Chen', 
-      email: 'alice@lab.com', 
-      role: 'admin', 
-      lab: '生化實驗室',
-      status: 'active',
-      createdAt: '2024-01-15',
-      lastLogin: '2024-06-15 09:30'
-    },
-    { 
-      id: 2, 
-      name: 'Bob Lin', 
-      email: 'bob@lab.com', 
-      role: 'user', 
-      lab: '物理實驗室',
-      status: 'active',
-      createdAt: '2024-02-20',
-      lastLogin: '2024-06-14 14:22'
-    },
-    { 
-      id: 3, 
-      name: 'Carol Wu', 
-      email: 'carol@lab.com', 
-      role: 'user', 
-      lab: '生化實驗室',
-      status: 'active',
-      createdAt: '2024-03-10',
-      lastLogin: '2024-06-13 16:45'
-    },
-    { 
-      id: 4, 
-      name: 'David Zhang', 
-      email: 'david@lab.com', 
-      role: 'admin', 
-      lab: '化學實驗室',
-      status: 'inactive',
-      createdAt: '2024-01-25',
-      lastLogin: '2024-05-20 11:15'
-    }
-  ]);
-
-  const [laboratories] = useState([
-    '生化實驗室',
-    '物理實驗室', 
-    '化學實驗室',
-    '材料實驗室'
-  ]);
-
+  const [users, setUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
-  const [filterLab, setFilterLab] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterCompany, setFilterCompany] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
 
   // 新增用戶表單狀態
-  const [newUser, setNewUser] = useState({
-    name: '',
-    email: '',
-    role: 'user',
-    lab: '',
-    password: ''
+  const [newUser, setNewUser] = useState<NewUser>({
+    account: '',
+    password: '',
+    func_permissions: [],
+    company: ''
   });
+
+  // 權限選項
+  const permissionOptions = [
+    { value: 'admin', label: '管理員' },
+    { value: 'user', label: '一般用戶' },
+    { value: 'lab_manager', label: '實驗室管理員' },
+    { value: 'data_viewer', label: '數據查看者' }
+  ];
+
+  // 獲取用戶列表
+  const fetchUsers = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+      
+      const response = await fetch('http://13.211.240.55/api/getUsers', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('無法獲取用戶列表');
+      }
+
+      const data = await response.json();
+      setUsers(data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '獲取用戶列表失敗');
+      console.error('獲取用戶列表失敗:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 組件加載時獲取用戶列表
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
   // 篩選用戶
   const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = filterRole === 'all' || user.role === filterRole;
-    const matchesLab = filterLab === 'all' || user.lab === filterLab;
-    const matchesStatus = filterStatus === 'all' || user.status === filterStatus;
+    const matchesSearch = user.account.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         user.company.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesRole = filterRole === 'all' || user.func_permissions.includes(filterRole);
+    const matchesCompany = filterCompany === 'all' || user.company === filterCompany;
     
-    return matchesSearch && matchesRole && matchesLab && matchesStatus;
+    return matchesSearch && matchesRole && matchesCompany;
   });
 
-  // 角色切換
-  const toggleUserRole = (userId) => {
-    setUsers(users.map(user => 
-      user.id === userId 
-        ? { ...user, role: user.role === 'admin' ? 'user' : 'admin' }
-        : user
-    ));
+  // 獲取用戶角色顯示
+  const getUserRoleDisplay = (permissions: string[]) => {
+    if (permissions.includes('admin')) return '管理員';
+    if (permissions.includes('lab_manager')) return '實驗室管理員';
+    if (permissions.includes('data_viewer')) return '數據查看者';
+    return '一般用戶';
   };
 
-  // 狀態切換
-  const toggleUserStatus = (userId) => {
-    setUsers(users.map(user => 
-      user.id === userId 
-        ? { ...user, status: user.status === 'active' ? 'inactive' : 'active' }
-        : user
-    ));
+  // 獲取用戶角色類型
+  const getUserRoleType = (permissions: string[]) => {
+    if (permissions.includes('admin')) return 'admin';
+    if (permissions.includes('lab_manager')) return 'lab_manager';
+    if (permissions.includes('data_viewer')) return 'data_viewer';
+    return 'user';
+  };
+
+  // 修改用戶權限
+  const modifyUserPermissions = async (account: string, newPermissions: string[]) => {
+    try {
+      const response = await fetch('http://13.211.240.55/api/modifyPermissions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          account: account,
+          func_permissions: newPermissions
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || '修改權限失敗');
+      }
+
+      alert('權限修改成功！');
+      fetchUsers(); // 重新獲取用戶列表
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '修改權限失敗');
+      console.error('修改權限失敗:', err);
+    }
+  };
+
+  // 角色切換
+  const toggleUserRole = async (user: User) => {
+    const currentRole = getUserRoleType(user.func_permissions);
+    let newPermissions: string[];
+    
+    switch (currentRole) {
+      case 'admin':
+        newPermissions = ['user'];
+        break;
+      case 'user':
+        newPermissions = ['admin'];
+        break;
+      case 'lab_manager':
+        newPermissions = ['user'];
+        break;
+      case 'data_viewer':
+        newPermissions = ['user'];
+        break;
+      default:
+        newPermissions = ['admin'];
+    }
+    
+    await modifyUserPermissions(user.account, newPermissions);
   };
 
   // 新增用戶
-  const handleAddUser = () => {
+  const handleAddUser = async () => {
     // 基本驗證
-    if (!newUser.name || !newUser.email || !newUser.password || !newUser.lab) {
+    if (!newUser.account || !newUser.password || !newUser.company) {
       alert('請填寫所有必填欄位');
       return;
     }
     
-    const newId = Math.max(...users.map(u => u.id)) + 1;
-    const userToAdd = {
-      ...newUser,
-      id: newId,
-      status: 'active',
-      createdAt: new Date().toISOString().split('T')[0],
-      lastLogin: '-'
-    };
-    setUsers([...users, userToAdd]);
-    setNewUser({ name: '', email: '', role: 'user', lab: '', password: '' });
-    setShowAddModal(false);
+    try {
+      const response = await fetch('http://13.211.240.55/api/createUser', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          account: newUser.account,
+          password: newUser.password,
+          func_permissions: newUser.func_permissions,
+          company: newUser.company
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || '創建用戶失敗');
+      }
+
+      alert('用戶創建成功！');
+      setNewUser({ account: '', password: '', func_permissions: [], company: '' });
+      setShowAddModal(false);
+      fetchUsers(); // 重新獲取用戶列表
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '創建用戶失敗');
+      console.error('創建用戶失敗:', err);
+    }
   };
 
   // 刪除用戶
-  const deleteUser = (userId) => {
+  const deleteUser = (account: string) => {
     if (window.confirm('確定要刪除此用戶嗎？')) {
-      setUsers(users.filter(user => user.id !== userId));
+      // 注意：後端API文檔中沒有刪除用戶的API，這裡只是從前端狀態中移除
+      setUsers(users.filter(user => user.account !== account));
     }
   };
 
   // 編輯用戶
-const handleEditUser = (user) => {
-  setEditingUser({...user});
-  setShowEditModal(true);
-};
+  const handleEditUser = (user: User) => {
+    setEditingUser({...user});
+    setShowEditModal(true);
+  };
 
-// 保存編輯
-const handleSaveEdit = () => {
-  if (!editingUser.name || !editingUser.email || !editingUser.lab) {
-    alert('請填寫所有必填欄位');
-    return;
+  // 保存編輯
+  const handleSaveEdit = async () => {
+    if (!editingUser || !editingUser.account || !editingUser.company) {
+      alert('請填寫所有必填欄位');
+      return;
+    }
+    
+    try {
+      const response = await fetch('http://13.211.240.55/api/modifyPermissions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          account: editingUser.account,
+          func_permissions: editingUser.func_permissions
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || '修改用戶失敗');
+      }
+
+      alert('用戶修改成功！');
+      setShowEditModal(false);
+      setEditingUser(null);
+      fetchUsers(); // 重新獲取用戶列表
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '修改用戶失敗');
+      console.error('修改用戶失敗:', err);
+    }
+  };
+
+  // 取消編輯
+  const handleCancelEdit = () => {
+    setShowEditModal(false);
+    setEditingUser(null);
+  };
+
+  // 顯示加載狀態
+  if (isLoading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-lg text-gray-600">載入中...</div>
+        </div>
+      </div>
+    );
   }
-  
-  setUsers(users.map(user => 
-    user.id === editingUser.id ? editingUser : user
-  ));
-  setShowEditModal(false);
-  setEditingUser(null);
-};
 
-// 取消編輯
-const handleCancelEdit = () => {
-  setShowEditModal(false);
-  setEditingUser(null);
-};
+  // 顯示錯誤狀態
+  if (error) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
+        </div>
+        <button 
+          onClick={fetchUsers}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          重新載入
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -177,7 +302,7 @@ const handleCancelEdit = () => {
             <div>
               <p className="text-sm text-gray-600">管理員</p>
               <p className="text-2xl font-bold text-gray-900">
-                {users.filter(u => u.role === 'admin').length}
+                {users.filter(u => u.func_permissions.includes('admin')).length}
               </p>
             </div>
             <UserPlus className="w-8 h-8 text-green-500" />
@@ -189,7 +314,7 @@ const handleCancelEdit = () => {
             <div>
               <p className="text-sm text-gray-600">一般用戶</p>
               <p className="text-2xl font-bold text-gray-900">
-                {users.filter(u => u.role === 'user').length}
+                {users.filter(u => u.func_permissions.includes('user')).length}
               </p>
             </div>
             <Eye className="w-8 h-8 text-yellow-500" />
@@ -199,9 +324,9 @@ const handleCancelEdit = () => {
         <div className="bg-white p-4 rounded-lg shadow border-l-4 border-red-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">停用用戶</p>
+              <p className="text-sm text-gray-600">實驗室管理員</p>
               <p className="text-2xl font-bold text-gray-900">
-                {users.filter(u => u.status === 'inactive').length}
+                {users.filter(u => u.func_permissions.includes('lab_manager')).length}
               </p>
             </div>
             <Trash2 className="w-8 h-8 text-red-500" />
@@ -232,29 +357,21 @@ const handleCancelEdit = () => {
               className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">所有角色</option>
-              <option value="admin">管理員</option>
-              <option value="user">一般用戶</option>
-            </select>
-            
-            <select 
-              value={filterLab} 
-              onChange={(e) => setFilterLab(e.target.value)}
-              className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">所有實驗室</option>
-              {laboratories.map(lab => (
-                <option key={lab} value={lab}>{lab}</option>
+              {permissionOptions.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
             
             <select 
-              value={filterStatus} 
-              onChange={(e) => setFilterStatus(e.target.value)}
+              value={filterCompany} 
+              onChange={(e) => setFilterCompany(e.target.value)}
               className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all">所有狀態</option>
-              <option value="active">啟用</option>
-              <option value="inactive">停用</option>
+              <option value="all">所有公司</option>
+              {/* 假設後端返回公司列表 */}
+              <option value="公司A">公司A</option>
+              <option value="公司B">公司B</option>
+              <option value="公司C">公司C</option>
             </select>
           </div>
           
@@ -282,13 +399,7 @@ const handleCancelEdit = () => {
                   角色
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  實驗室
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  狀態
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  最後登入
+                  公司
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   操作
@@ -297,24 +408,24 @@ const handleCancelEdit = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredUsers.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50">
+                <tr key={user.account} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                      <div className="text-sm text-gray-500">{user.email}</div>
+                      <div className="text-sm font-medium text-gray-900">{user.account}</div>
+                      <div className="text-sm text-gray-500">{user.company}</div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        user.role === 'admin' 
+                        user.func_permissions.includes('admin') 
                           ? 'bg-blue-100 text-blue-800' 
                           : 'bg-gray-100 text-gray-800'
                       }`}>
-                        {user.role === 'admin' ? '管理員' : '一般用戶'}
+                        {getUserRoleDisplay(user.func_permissions)}
                       </span>
                       <button
-                        onClick={() => toggleUserRole(user.id)}
+                        onClick={() => toggleUserRole(user)}
                         className="text-blue-600 hover:text-blue-800 text-sm"
                       >
                         切換
@@ -322,27 +433,7 @@ const handleCancelEdit = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {user.lab}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        user.status === 'active' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {user.status === 'active' ? '啟用' : '停用'}
-                      </span>
-                      <button
-                        onClick={() => toggleUserStatus(user.id)}
-                        className="text-gray-600 hover:text-gray-800 text-sm"
-                      >
-                        切換
-                      </button>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.lastLogin}
+                    {user.company}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex items-center gap-2">
@@ -354,7 +445,7 @@ const handleCancelEdit = () => {
                       </button>
                       <button 
                         className="text-red-600 hover:text-red-900"
-                        onClick={() => deleteUser(user.id)}
+                        onClick={() => deleteUser(user.account)}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -376,25 +467,13 @@ const handleCancelEdit = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    姓名
+                    帳號
                   </label>
                   <input
                     type="text"
                     className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={newUser.name}
-                    onChange={(e) => setNewUser({...newUser, name: e.target.value})}
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    郵箱
-                  </label>
-                  <input
-                    type="email"
-                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={newUser.email}
-                    onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                    value={newUser.account}
+                    onChange={(e) => setNewUser({...newUser, account: e.target.value})}
                   />
                 </div>
                 
@@ -412,32 +491,47 @@ const handleCancelEdit = () => {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    角色
+                    公司
                   </label>
                   <select
                     className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={newUser.role}
-                    onChange={(e) => setNewUser({...newUser, role: e.target.value})}
+                    value={newUser.company}
+                    onChange={(e) => setNewUser({...newUser, company: e.target.value})}
                   >
-                    <option value="user">一般用戶</option>
-                    <option value="admin">管理員</option>
+                    <option value="">請選擇公司</option>
+                    {/* 假設後端返回公司列表 */}
+                    <option value="公司A">公司A</option>
+                    <option value="公司B">公司B</option>
+                    <option value="公司C">公司C</option>
                   </select>
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    實驗室
+                    權限
                   </label>
-                  <select
-                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={newUser.lab}
-                    onChange={(e) => setNewUser({...newUser, lab: e.target.value})}
-                  >
-                    <option value="">請選擇實驗室</option>
-                    {laboratories.map(lab => (
-                      <option key={lab} value={lab}>{lab}</option>
+                  <div className="grid grid-cols-2 gap-2">
+                    {permissionOptions.map(option => (
+                      <label key={option.value} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          value={option.value}
+                          checked={newUser.func_permissions.includes(option.value)}
+                          onChange={(e) => {
+                            const newPermissions = [...newUser.func_permissions];
+                            if (e.target.checked) {
+                              newPermissions.push(option.value);
+                            } else {
+                              newPermissions.splice(newPermissions.indexOf(option.value), 1);
+                            }
+                            setNewUser({...newUser, func_permissions: newPermissions});
+                          }}
+                          className="mr-2"
+                        />
+                        {option.label}
+                      </label>
                     ))}
-                  </select>
+                  </div>
                 </div>
               </div>
               
@@ -470,70 +564,59 @@ const handleCancelEdit = () => {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              姓名
+              帳號
             </label>
             <input
               type="text"
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={editingUser.name}
-              onChange={(e) => setEditingUser({...editingUser, name: e.target.value})}
+              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-100"
+              value={editingUser.account}
+              readOnly
             />
           </div>
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              郵箱
-            </label>
-            <input
-              type="email"
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={editingUser.email}
-              onChange={(e) => setEditingUser({...editingUser, email: e.target.value})}
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              角色
+              公司
             </label>
             <select
               className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={editingUser.role}
-              onChange={(e) => setEditingUser({...editingUser, role: e.target.value})}
+              value={editingUser.company}
+              onChange={(e) => setEditingUser({...editingUser, company: e.target.value})}
             >
-              <option value="user">一般用戶</option>
-              <option value="admin">管理員</option>
+              <option value="">請選擇公司</option>
+              {/* 假設後端返回公司列表 */}
+              <option value="公司A">公司A</option>
+              <option value="公司B">公司B</option>
+              <option value="公司C">公司C</option>
             </select>
           </div>
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              實驗室
+              權限
             </label>
-            <select
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={editingUser.lab}
-              onChange={(e) => setEditingUser({...editingUser, lab: e.target.value})}
-            >
-              <option value="">請選擇實驗室</option>
-              {laboratories.map(lab => (
-                <option key={lab} value={lab}>{lab}</option>
+            <div className="grid grid-cols-2 gap-2">
+              {permissionOptions.map(option => (
+                <label key={option.value} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    value={option.value}
+                    checked={editingUser.func_permissions.includes(option.value)}
+                    onChange={(e) => {
+                      const newPermissions = [...editingUser.func_permissions];
+                      if (e.target.checked) {
+                        newPermissions.push(option.value);
+                      } else {
+                        newPermissions.splice(newPermissions.indexOf(option.value), 1);
+                      }
+                      setEditingUser({...editingUser, func_permissions: newPermissions});
+                    }}
+                    className="mr-2"
+                  />
+                  {option.label}
+                </label>
               ))}
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              狀態
-            </label>
-            <select
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={editingUser.status}
-              onChange={(e) => setEditingUser({...editingUser, status: e.target.value})}
-            >
-              <option value="active">啟用</option>
-              <option value="inactive">停用</option>
-            </select>
+            </div>
           </div>
         </div>
         

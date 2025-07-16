@@ -1,56 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
+// 定義實驗室介面
+interface Sensor {
+  name: string;
+  description: string;
+  company: string;
+  lab: string;
+}
+
+interface Laboratory {
+  id: string;
+  name: string;
+  description: string;
+  sensors: Sensor[];
+  company: string;
+}
 
 const LaboratoryManagement = () => {
-  const [laboratories, setLaboratories] = useState([
-    {
-      id: 1,
-      name: '生化實驗室',
-      location: 'A棟 3樓',
-      status: 'active',
-      description: '主要進行生物化學相關實驗',
-      createdAt: '2024-01-15',
-      sensors: [
-        { id: 1, name: '溫度感測器', type: 'temperature', unit: '°C', status: 'active' },
-        { id: 2, name: '濕度感測器', type: 'humidity', unit: '%', status: 'active' },
-        { id: 3, name: 'pH感測器', type: 'ph', unit: 'pH', status: 'inactive' }
-      ]
-    },
-    {
-      id: 2,
-      name: '物理實驗室',
-      location: 'B棟 2樓',
-      status: 'active',
-      description: '物理實驗和測量設備',
-      createdAt: '2024-02-20',
-      sensors: [
-        { id: 4, name: '壓力感測器', type: 'pressure', unit: 'Pa', status: 'active' },
-        { id: 5, name: '光照感測器', type: 'light', unit: 'lux', status: 'active' }
-      ]
-    }
-  ]);
-
+  const [laboratories, setLaboratories] = useState<Laboratory[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [showAddLabModal, setShowAddLabModal] = useState(false);
   const [showEditLabModal, setShowEditLabModal] = useState(false);
   const [showSensorModal, setShowSensorModal] = useState(false);
-  const [editingLab, setEditingLab] = useState(null);
-  const [managingSensorsLab, setManagingSensorsLab] = useState(null);
+  const [editingLab, setEditingLab] = useState<Laboratory | null>(null);
+  const [managingSensorsLab, setManagingSensorsLab] = useState<Laboratory | null>(null);
 
   // 新增實驗室表單
   const [newLab, setNewLab] = useState({
     name: '',
-    location: '',
-    status: 'active',
-    description: ''
+    description: '',
+    sensors: [] as Sensor[],
+    company: ''
   });
 
   // 新增感測器表單
   const [newSensor, setNewSensor] = useState({
     name: '',
-    type: 'temperature',
-    unit: '',
-    status: 'active'
+    description: '',
+    company: '',
+    lab: ''
   });
 
   // 感測器類型選項
@@ -65,137 +57,266 @@ const LaboratoryManagement = () => {
     { value: 'vibration', label: '震動', defaultUnit: 'Hz' }
   ];
 
+  // 獲取實驗室列表
+  const fetchLabs = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+      
+      const response = await fetch('http://13.211.240.55/api/getLabs', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('無法獲取實驗室列表');
+      }
+
+      const data = await response.json();
+      setLaboratories(data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '獲取實驗室列表失敗');
+      console.error('獲取實驗室列表失敗:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 組件加載時獲取實驗室列表
+  useEffect(() => {
+    fetchLabs();
+  }, []);
+
   // 篩選實驗室
   const filteredLabs = laboratories.filter(lab => {
     const matchesSearch = lab.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         lab.location.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || lab.status === filterStatus;
-    return matchesSearch && matchesStatus;
+                         lab.description.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesSearch;
   });
 
   // 新增實驗室
-  const handleAddLab = () => {
-    if (!newLab.name || !newLab.location) {
-      alert('請填寫實驗室名稱和位置');
+  const handleAddLab = async () => {
+    if (!newLab.name || !newLab.description || !newLab.company) {
+      alert('請填寫實驗室名稱、描述和公司');
       return;
     }
     
-    const newId = Math.max(...laboratories.map(l => l.id)) + 1;
-    const labToAdd = {
-      ...newLab,
-      id: newId,
-      createdAt: new Date().toISOString().split('T')[0],
-      sensors: []
-    };
-    setLaboratories([...laboratories, labToAdd]);
-    setNewLab({ name: '', location: '', status: 'active', description: '' });
-    setShowAddLabModal(false);
+    try {
+      const response = await fetch('http://13.211.240.55/api/createLab', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          name: newLab.name,
+          description: newLab.description,
+          sensors: newLab.sensors,
+          company: newLab.company
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || '創建實驗室失敗');
+      }
+
+      alert('實驗室創建成功！');
+      setNewLab({ name: '', description: '', sensors: [], company: '' });
+      setShowAddLabModal(false);
+      fetchLabs(); // 重新獲取實驗室列表
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '創建實驗室失敗');
+      console.error('創建實驗室失敗:', err);
+    }
   };
 
   // 編輯實驗室
-  const handleEditLab = (lab) => {
+  const handleEditLab = (lab: Laboratory) => {
     setEditingLab({...lab});
     setShowEditLabModal(true);
   };
 
   // 保存編輯
-  const handleSaveEditLab = () => {
-    if (!editingLab.name || !editingLab.location) {
-      alert('請填寫實驗室名稱和位置');
+  const handleSaveEditLab = async () => {
+    if (!editingLab || !editingLab.name || !editingLab.description || !editingLab.company) {
+      alert('請填寫實驗室名稱、描述和公司');
       return;
     }
     
-    setLaboratories(laboratories.map(lab => 
-      lab.id === editingLab.id ? editingLab : lab
-    ));
-    setShowEditLabModal(false);
-    setEditingLab(null);
+    try {
+      const response = await fetch('http://13.211.240.55/api/modifyLab', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          id: editingLab.id,
+          name: editingLab.name,
+          description: editingLab.description,
+          sensors: editingLab.sensors,
+          company: editingLab.company
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || '修改實驗室失敗');
+      }
+
+      alert('實驗室修改成功！');
+      setShowEditLabModal(false);
+      setEditingLab(null);
+      fetchLabs(); // 重新獲取實驗室列表
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '修改實驗室失敗');
+      console.error('修改實驗室失敗:', err);
+    }
   };
 
   // 刪除實驗室
-  const deleteLab = (labId) => {
+  const deleteLab = (labId: string) => {
     if (window.confirm('確定要刪除此實驗室嗎？這將同時刪除所有相關的感測器。')) {
+      // 注意：後端API文檔中沒有刪除實驗室的API，這裡只是從前端狀態中移除
       setLaboratories(laboratories.filter(lab => lab.id !== labId));
     }
   };
 
   // 管理感測器
-  const manageSensors = (lab) => {
+  const manageSensors = (lab: Laboratory) => {
     setManagingSensorsLab(lab);
     setShowSensorModal(true);
   };
 
   // 新增感測器
-  const handleAddSensor = () => {
-    if (!newSensor.name || !newSensor.unit) {
-      alert('請填寫感測器名稱和單位');
+  const handleAddSensor = async () => {
+    if (!newSensor.name || !newSensor.description || !newSensor.company || !managingSensorsLab) {
+      alert('請填寫感測器名稱、描述和公司');
       return;
     }
     
-    const existingSensorIds = managingSensorsLab.sensors.map(s => s.id);
-    const newId = existingSensorIds.length > 0 ? Math.max(...existingSensorIds) + 1 : 1;
-    
-    const sensorToAdd = {
-      ...newSensor,
-      id: newId
-    };
-    
-    const updatedLab = {
-      ...managingSensorsLab,
-      sensors: [...managingSensorsLab.sensors, sensorToAdd]
-    };
-    
-    setLaboratories(laboratories.map(lab => 
-      lab.id === managingSensorsLab.id ? updatedLab : lab
-    ));
-    
-    setManagingSensorsLab(updatedLab);
-    setNewSensor({ name: '', type: 'temperature', unit: '', status: 'active' });
-  };
+    try {
+      const sensorToAdd = {
+        ...newSensor,
+        lab: managingSensorsLab.name
+      };
 
-  // 刪除感測器
-  const deleteSensor = (sensorId) => {
-    if (window.confirm('確定要刪除此感測器嗎？')) {
+      // 更新實驗室，添加新感測器
       const updatedLab = {
         ...managingSensorsLab,
-        sensors: managingSensorsLab.sensors.filter(sensor => sensor.id !== sensorId)
+        sensors: [...managingSensorsLab.sensors, sensorToAdd]
       };
-      
-      setLaboratories(laboratories.map(lab => 
-        lab.id === managingSensorsLab.id ? updatedLab : lab
-      ));
-      
-      setManagingSensorsLab(updatedLab);
+
+      const response = await fetch('http://13.211.240.55/api/modifyLab', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          id: updatedLab.id,
+          name: updatedLab.name,
+          description: updatedLab.description,
+          sensors: updatedLab.sensors,
+          company: updatedLab.company
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || '添加感測器失敗');
+      }
+
+      alert('感測器添加成功！');
+      setNewSensor({ name: '', description: '', company: '', lab: '' });
+      fetchLabs(); // 重新獲取實驗室列表
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '添加感測器失敗');
+      console.error('添加感測器失敗:', err);
     }
   };
 
-  // 切換感測器狀態
-  const toggleSensorStatus = (sensorId) => {
-    const updatedLab = {
-      ...managingSensorsLab,
-      sensors: managingSensorsLab.sensors.map(sensor =>
-        sensor.id === sensorId 
-          ? { ...sensor, status: sensor.status === 'active' ? 'inactive' : 'active' }
-          : sensor
-      )
-    };
+  // 刪除感測器
+  const deleteSensor = async (sensorIndex: number) => {
+    if (!managingSensorsLab) return;
     
-    setLaboratories(laboratories.map(lab => 
-      lab.id === managingSensorsLab.id ? updatedLab : lab
-    ));
-    
-    setManagingSensorsLab(updatedLab);
+    if (window.confirm('確定要刪除此感測器嗎？')) {
+      try {
+        const updatedSensors = managingSensorsLab.sensors.filter((_, index) => index !== sensorIndex);
+        const updatedLab = {
+          ...managingSensorsLab,
+          sensors: updatedSensors
+        };
+
+        const response = await fetch('http://13.211.240.55/api/modifyLab', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({
+            id: updatedLab.id,
+            name: updatedLab.name,
+            description: updatedLab.description,
+            sensors: updatedLab.sensors,
+            company: updatedLab.company
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || '刪除感測器失敗');
+        }
+
+        alert('感測器刪除成功！');
+        fetchLabs(); // 重新獲取實驗室列表
+      } catch (err) {
+        alert(err instanceof Error ? err.message : '刪除感測器失敗');
+        console.error('刪除感測器失敗:', err);
+      }
+    }
   };
 
   // 感測器類型改變時自動設置單位
-  const handleSensorTypeChange = (type) => {
+  const handleSensorTypeChange = (type: string) => {
     const selectedType = sensorTypes.find(t => t.value === type);
     setNewSensor({
       ...newSensor,
-      type: type,
-      unit: selectedType ? selectedType.defaultUnit : ''
+      name: selectedType ? selectedType.label + '感測器' : newSensor.name
     });
   };
+
+  // 顯示加載狀態
+  if (isLoading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-lg text-gray-600">載入中...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // 顯示錯誤狀態
+  if (error) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
+        </div>
+        <button 
+          onClick={fetchLabs}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          重新載入
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -207,24 +328,12 @@ const LaboratoryManagement = () => {
 
       {/* 統計卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">總實驗室數</p>
-              <p className="text-2xl font-bold text-gray-900">{laboratories.length}</p>
-            </div>
-            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-              <span className="text-blue-600 font-bold">🏢</span>
-            </div>
-          </div>
-        </div>
-        
         <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">運行中</p>
+              <p className="text-sm text-gray-600">總實驗室數</p>
               <p className="text-2xl font-bold text-gray-900">
-                {laboratories.filter(l => l.status === 'active').length}
+                {laboratories.length}
               </p>
             </div>
             <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
@@ -250,11 +359,12 @@ const LaboratoryManagement = () => {
         <div className="bg-white p-4 rounded-lg shadow border-l-4 border-purple-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">啟用感測器</p>
+              <p className="text-sm text-gray-600">平均感測器數</p>
               <p className="text-2xl font-bold text-gray-900">
-                {laboratories.reduce((total, lab) => 
-                  total + lab.sensors.filter(s => s.status === 'active').length, 0
-                )}
+                {laboratories.length > 0 
+                  ? Math.round(laboratories.reduce((total, lab) => total + lab.sensors.length, 0) / laboratories.length)
+                  : 0
+                }
               </p>
             </div>
             <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
@@ -311,14 +421,10 @@ const LaboratoryManagement = () => {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">{lab.name}</h3>
-                  <p className="text-sm text-gray-500">📍 {lab.location}</p>
+                  <p className="text-sm text-gray-500">📍 {lab.description}</p>
                 </div>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  lab.status === 'active' 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-red-100 text-red-800'
-                }`}>
-                  {lab.status === 'active' ? '運行中' : '停用'}
+                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  {lab.company}
                 </span>
               </div>
               
@@ -330,14 +436,8 @@ const LaboratoryManagement = () => {
                   <span className="font-medium">{lab.sensors.length}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">啟用感測器：</span>
-                  <span className="font-medium text-green-600">
-                    {lab.sensors.filter(s => s.status === 'active').length}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">創建日期：</span>
-                  <span className="font-medium">{lab.createdAt}</span>
+                  <span className="text-gray-500">公司：</span>
+                  <span className="font-medium">{lab.company}</span>
                 </div>
               </div>
               
@@ -388,41 +488,27 @@ const LaboratoryManagement = () => {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    位置 *
+                    描述 *
                   </label>
-                  <input
-                    type="text"
+                  <textarea
                     className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={newLab.location}
-                    onChange={(e) => setNewLab({...newLab, location: e.target.value})}
-                    placeholder="例如：A棟 3樓"
+                    rows={3}
+                    value={newLab.description}
+                    onChange={(e) => setNewLab({...newLab, description: e.target.value})}
+                    placeholder="實驗室用途描述..."
                   />
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    狀態
+                    公司 *
                   </label>
-                  <select
+                  <input
+                    type="text"
                     className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={newLab.status}
-                    onChange={(e) => setNewLab({...newLab, status: e.target.value})}
-                  >
-                    <option value="active">運行中</option>
-                    <option value="inactive">停用</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    描述
-                  </label>
-                  <textarea
-                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    rows="3"
-                    value={newLab.description}
-                    onChange={(e) => setNewLab({...newLab, description: e.target.value})}
-                    placeholder="實驗室用途描述..."
+                    value={newLab.company}
+                    onChange={(e) => setNewLab({...newLab, company: e.target.value})}
+                    placeholder="例如：公司A"
                   />
                 </div>
               </div>
@@ -469,39 +555,25 @@ const LaboratoryManagement = () => {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    位置 *
+                    描述 *
                   </label>
-                  <input
-                    type="text"
+                  <textarea
                     className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={editingLab.location}
-                    onChange={(e) => setEditingLab({...editingLab, location: e.target.value})}
+                    rows={3}
+                    value={editingLab.description}
+                    onChange={(e) => setEditingLab({...editingLab, description: e.target.value})}
                   />
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    狀態
+                    公司 *
                   </label>
-                  <select
+                  <input
+                    type="text"
                     className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={editingLab.status}
-                    onChange={(e) => setEditingLab({...editingLab, status: e.target.value})}
-                  >
-                    <option value="active">運行中</option>
-                    <option value="inactive">停用</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    描述
-                  </label>
-                  <textarea
-                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    rows="3"
-                    value={editingLab.description}
-                    onChange={(e) => setEditingLab({...editingLab, description: e.target.value})}
+                    value={editingLab.company}
+                    onChange={(e) => setEditingLab({...editingLab, company: e.target.value})}
                   />
                 </div>
               </div>
@@ -554,21 +626,19 @@ const LaboratoryManagement = () => {
                   value={newSensor.name}
                   onChange={(e) => setNewSensor({...newSensor, name: e.target.value})}
                 />
-                <select
-                  className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newSensor.type}
-                  onChange={(e) => handleSensorTypeChange(e.target.value)}
-                >
-                  {sensorTypes.map(type => (
-                    <option key={type.value} value={type.value}>{type.label}</option>
-                  ))}
-                </select>
                 <input
                   type="text"
-                  placeholder="單位"
+                  placeholder="感測器描述"
                   className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newSensor.unit}
-                  onChange={(e) => setNewSensor({...newSensor, unit: e.target.value})}
+                  value={newSensor.description}
+                  onChange={(e) => setNewSensor({...newSensor, description: e.target.value})}
+                />
+                <input
+                  type="text"
+                  placeholder="公司"
+                  className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={newSensor.company}
+                  onChange={(e) => setNewSensor({...newSensor, company: e.target.value})}
                 />
                 <button
                   onClick={handleAddSensor}
@@ -586,31 +656,17 @@ const LaboratoryManagement = () => {
                 <p className="text-gray-500 text-center py-8">此實驗室尚未設置感測器</p>
               ) : (
                 <div className="space-y-2">
-                  {managingSensorsLab.sensors.map((sensor) => (
-                    <div key={sensor.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  {managingSensorsLab.sensors.map((sensor, index) => (
+                    <div key={`${sensor.name}-${index}`} className="flex items-center justify-between p-3 border rounded-lg">
                       <div className="flex-1">
                         <div className="font-medium">{sensor.name}</div>
                         <div className="text-sm text-gray-500">
-                          類型: {sensorTypes.find(t => t.value === sensor.type)?.label} | 
-                          單位: {sensor.unit}
+                          描述: {sensor.description} | 公司: {sensor.company}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          sensor.status === 'active' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {sensor.status === 'active' ? '啟用' : '停用'}
-                        </span>
                         <button
-                          onClick={() => toggleSensorStatus(sensor.id)}
-                          className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-                        >
-                          切換
-                        </button>
-                        <button
-                          onClick={() => deleteSensor(sensor.id)}
+                          onClick={() => deleteSensor(index)}
                           className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
                         >
                           🗑️

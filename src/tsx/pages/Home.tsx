@@ -11,8 +11,20 @@ interface LabData {
   o3: number;
 }
 
+interface Sensor {
+  name: string;
+  value: number;
+  type: string;
+}
+
+interface Laboratory {
+  id: string;
+  name: string;
+  sensors: Sensor[];
+}
+
 const Home: React.FC = () => {
-  // 只保留實驗室數據相關的狀態
+  // 彙總所有實驗室感測器的平均值
   const [labData, setLabData] = useState<LabData>({
     co2: 0,
     o2: 0,
@@ -24,14 +36,13 @@ const Home: React.FC = () => {
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
-  
-  // 獲取實驗室數據 (保持不變)
+
   useEffect(() => {
     const fetchLabData = async () => {
       try {
         setIsLoading(true);
-        // 需要替換成實際的API地址
-        const response = await fetch('http://your-server-address:port/api/lab-data', {
+        setError('');
+        const response = await fetch('http://13.211.240.55/api/getLabs', {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
@@ -39,41 +50,35 @@ const Home: React.FC = () => {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });
-        
-        if (!response.ok) {
-          throw new Error('無法獲取實驗室數據');
-        }
-        
-        // 檢查內容類型
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('伺服器返回的不是JSON格式');
-        }
-        
-        // 檢查回應是否為空
-        const text = await response.text();
-        if (!text) {
-          throw new Error('伺服器返回空回應');
-        }
-        
-        // 安全地解析JSON
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch (parseError) {
-          console.error('JSON解析錯誤:', parseError, '原始文本:', text);
-          throw new Error('無法解析JSON回應');
-        }
-        
-        // 設置數據
+        if (!response.ok) throw new Error('無法獲取實驗室數據');
+        const labs: Laboratory[] = await response.json();
+        // 彙總所有感測器數據
+        const sum: LabData = {
+          co2: 0, o2: 0, ch2o: 0, co: 0, nh3: 0, humidity: 0, o3: 0
+        };
+        let count: LabData = {
+          co2: 0, o2: 0, ch2o: 0, co: 0, nh3: 0, humidity: 0, o3: 0
+        };
+        labs.forEach(lab => {
+          lab.sensors?.forEach(sensor => {
+            const type = sensor.type.toLowerCase();
+            if (type in sum) {
+              // @ts-ignore
+              sum[type] += Number(sensor.value) || 0;
+              // @ts-ignore
+              count[type] += 1;
+            }
+          });
+        });
+        // 計算平均值
         setLabData({
-          co2: data.co2 ?? 0,
-          o2: data.o2 ?? 0,
-          ch2o: data.ch2o ?? 0,
-          co: data.co ?? 0,
-          nh3: data.nh3 ?? 0,
-          humidity: data.humidity ?? 0,
-          o3: data.o3 ?? 0
+          co2: count.co2 ? Math.round(sum.co2 / count.co2) : 0,
+          o2: count.o2 ? Math.round(sum.o2 / count.o2) : 0,
+          ch2o: count.ch2o ? Math.round(sum.ch2o / count.ch2o) : 0,
+          co: count.co ? Math.round(sum.co / count.co) : 0,
+          nh3: count.nh3 ? Math.round(sum.nh3 / count.nh3) : 0,
+          humidity: count.humidity ? Math.round(sum.humidity / count.humidity) : 0,
+          o3: count.o3 ? Math.round(sum.o3 / count.o3) : 0
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : '獲取數據失敗');
@@ -82,13 +87,8 @@ const Home: React.FC = () => {
         setIsLoading(false);
       }
     };
-
     fetchLabData();
-    
-    // 設置定時器每分鐘更新一次數據
     const intervalId = setInterval(fetchLabData, 60000);
-    
-    // 清除effect
     return () => clearInterval(intervalId);
   }, []);
 

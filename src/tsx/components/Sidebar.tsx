@@ -20,7 +20,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const navItems: NavItem[] = [
     { title: '首頁', path: '/dashboard', icon: <FiHome size={20} /> },
     { title: '數據記錄', path: '/data-records', icon: <FiDatabase size={20} /> },
-    { title: '警報設置', path: '/alerts', icon: <FiAlertCircle size={20} /> },
+    { title: '警報設置', path: '/alert', icon: <FiAlertCircle size={20} /> },
     { title: '統計圖表', path: '/statistics', icon: <FiBarChart2 size={20} /> },
     { title: '用戶管理', path: '/PU-addusers', icon: <FiUser size={20} /> },
     { title: '實驗室管理', path: '/PU-laboratarymnagement', icon: <FiSettings size={20} /> }

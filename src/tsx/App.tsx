@@ -7,6 +7,7 @@ import Layout from './components/Layout';
 import AddUser from './pages/PU-adduser'
 import LaboratoryManagement from './pages/PU-LaborataryMnagement';
 import ProtectedRoute from './components/ProtectedRoute';
+import Alert from './pages/Alert';
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
         <Route path="/data-records" element={<ProtectedRoute><Layout><Datarecords /></Layout></ProtectedRoute>} />
+        <Route path="/alert" element={<ProtectedRoute><Layout><Alert /></Layout></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Layout><Home /></Layout></ProtectedRoute>} />
         <Route path="/PU-addusers" element={<ProtectedRoute><Layout><AddUser /></Layout></ProtectedRoute>} />
         <Route path="/PU-laboratarymnagement" element={<ProtectedRoute><Layout><LaboratoryManagement /></Layout></ProtectedRoute>} />

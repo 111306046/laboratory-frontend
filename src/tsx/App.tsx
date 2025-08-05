@@ -8,6 +8,7 @@ import AddUser from './pages/PU-adduser'
 import LaboratoryManagement from './pages/PU-LaborataryMnagement';
 import ProtectedRoute from './components/ProtectedRoute';
 import Alert from './pages/Alert';
+import StaticChart from './pages/StaticChart'
 
 function App() {
   return (
@@ -21,7 +22,10 @@ function App() {
         <Route path="/alert" element={<ProtectedRoute><Layout><Alert /></Layout></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Layout><Home /></Layout></ProtectedRoute>} />
         <Route path="/PU-addusers" element={<ProtectedRoute><Layout><AddUser /></Layout></ProtectedRoute>} />
-        <Route path="/PU-laboratarymnagement" element={<ProtectedRoute><Layout><LaboratoryManagement /></Layout></ProtectedRoute>} />
+        <Route path="/PU-laboratarymnagement" element={<ProtectedRoute><Layout><LaboratoryManagement /></Layout></ProtectedRoute>} />        
+        <Route path="/static-chart" element={<ProtectedRoute><Layout><StaticChart /></Layout></ProtectedRoute>} />
+
+
       </Routes>
     </BrowserRouter>
   );

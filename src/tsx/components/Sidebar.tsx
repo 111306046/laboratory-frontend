@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiHome, FiDatabase, FiAlertCircle, FiBarChart2, FiUser, FiSettings, FiMenu, FiLogOut } from 'react-icons/fi';
+import { FiHome, FiUser, FiSettings, FiMenu, FiLogOut, FiDatabase, FiAlertCircle, FiBarChart2, FiBell } from 'react-icons/fi';
 
 interface SidebarProps {
   sidebarOpen: boolean;

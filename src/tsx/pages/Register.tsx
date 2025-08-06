@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { PERMISSIONS } from '../utils/permissions';
 
 const Register: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -23,7 +24,7 @@ const Register: React.FC = () => {
     try {
       
       // 確保請求體的格式與後端期望的完全匹配
-      const response = await fetch('http://13.211.240.55/api/createUser', {
+      const response = await fetch('/api/createUser', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -31,7 +32,7 @@ const Register: React.FC = () => {
         body: JSON.stringify({
           account: email, // 確保字段名是 account 而不是 email
           password: password,
-          func_permissions: [], // 默認空權限
+          func_permissions: [PERMISSIONS.VIEW_DATA, PERMISSIONS.CHANGE_PASSWORD], // 默認基本權限
           company: company
         }),
       });

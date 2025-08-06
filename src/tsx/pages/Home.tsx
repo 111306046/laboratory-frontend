@@ -42,7 +42,7 @@ const Home: React.FC = () => {
       try {
         setIsLoading(true);
         setError('');
-        const response = await fetch('http://13.211.240.55/api/getLabs', {
+        const response = await fetch('/api/getLabs', {
           method: 'GET',
           headers: {
             'Accept': 'application/json',

@@ -1,19 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { Search, UserPlus, Shield, Edit, Trash2, Eye, ChevronDown, Filter } from 'lucide-react';
+import { 
+  getPermissionOptions, 
+  validatePermissions, 
+  isValidPermission,
+  testPermissionSystem,
+  type Permission 
+} from '../utils/permissions';
 
 // 定義用戶介面 - 根據後端API結構調整
 interface User {
   account: string;
-  func_permissions: string[];
+  func_permissions: Permission[];
   company: string;
+  irole?: string;
 }
 
 // 定義新用戶介面
 interface NewUser {
   account: string;
   password: string;
-  func_permissions: string[];
+  func_permissions: Permission[];
   company: string;
+  irole?: string;
 }
 
 const AdminManagement = () => {
@@ -36,12 +45,23 @@ const AdminManagement = () => {
     company: ''
   });
 
-  // 權限選項
+  // 角色選項
+  const roleOptions = [
+    { value: 'basic_user', label: '基本用戶', permissions: ['view_data', 'change_password'] as Permission[] },
+    { value: 'admin', label: '管理員', permissions: ['create_user', 'modify_user', 'get_users', 'view_data', 'change_password'] as Permission[] },
+    { value: 'lab_manager', label: '實驗室管理員', permissions: ['modify_lab', 'get_labs', 'view_data', 'change_password'] as Permission[] }
+  ];
+
+  // 權限選項（用於手動調整）
   const permissionOptions = [
-    { value: 'admin', label: '管理員' },
-    { value: 'user', label: '一般用戶' },
-    { value: 'lab_manager', label: '實驗室管理員' },
-    { value: 'data_viewer', label: '數據查看者' }
+    { value: 'view_data', label: '查看數據' },
+    { value: 'change_password', label: '修改密碼' },
+    { value: 'create_user', label: '創建用戶' },
+    { value: 'modify_user', label: '修改用戶' },
+    { value: 'get_users', label: '查看用戶列表' },
+    { value: 'modify_lab', label: '修改實驗室' },
+    { value: 'get_labs', label: '查看實驗室' },
+    { value: 'control_machine', label: '控制機器 (謹慎使用)' }
   ];
 
   // 獲取用戶列表
@@ -50,7 +70,7 @@ const AdminManagement = () => {
       setIsLoading(true);
       setError('');
       
-      const response = await fetch('http://13.211.240.55/api/getUsers', {
+      const response = await fetch('/api/getUsers', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -81,32 +101,49 @@ const AdminManagement = () => {
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.account.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.company.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = filterRole === 'all' || user.func_permissions.includes(filterRole);
+    const matchesRole = filterRole === 'all' || user.func_permissions.includes(filterRole as Permission);
     const matchesCompany = filterCompany === 'all' || user.company === filterCompany;
     
     return matchesSearch && matchesRole && matchesCompany;
   });
 
+
+
   // 獲取用戶角色顯示
-  const getUserRoleDisplay = (permissions: string[]) => {
-    if (permissions.includes('admin')) return '管理員';
-    if (permissions.includes('lab_manager')) return '實驗室管理員';
-    if (permissions.includes('data_viewer')) return '數據查看者';
+  const getUserRoleDisplay = (permissions: Permission[]) => {
+    if (permissions.includes('create_user' as Permission)) return '管理員';
+    if (permissions.includes('modify_lab' as Permission)) return '實驗室管理員';
+    if (permissions.includes('view_data' as Permission)) return '數據查看者';
     return '一般用戶';
   };
 
   // 獲取用戶角色類型
-  const getUserRoleType = (permissions: string[]) => {
-    if (permissions.includes('admin')) return 'admin';
-    if (permissions.includes('lab_manager')) return 'lab_manager';
-    if (permissions.includes('data_viewer')) return 'data_viewer';
+  const getUserRoleType = (permissions: Permission[]) => {
+    if (permissions.includes('create_user' as Permission)) return 'admin';
+    if (permissions.includes('modify_lab' as Permission)) return 'lab_manager';
+    if (permissions.includes('view_data' as Permission)) return 'data_viewer';
     return 'user';
   };
 
+
+
   // 修改用戶權限
-  const modifyUserPermissions = async (account: string, newPermissions: string[]) => {
+  const modifyUserPermissions = async (account: string, newPermissions: Permission[]) => {
     try {
-      const response = await fetch('http://13.211.240.55/api/modifyPermissions', {
+      // 驗證權限是否在允許列表中
+      const permissionStrings = newPermissions.map(p => p as string);
+      const validatedPermissions = validatePermissions(permissionStrings);
+      
+      console.log('修改權限 - 原始權限:', permissionStrings);
+      console.log('修改權限 - 驗證後權限:', validatedPermissions);
+      
+      if (validatedPermissions.length !== newPermissions.length) {
+        const invalidPermissions = newPermissions.filter(p => !isValidPermission(p as string));
+        console.warn('發現無效權限:', invalidPermissions);
+        alert(`發現無效權限: ${invalidPermissions.join(', ')}。已自動過濾。`);
+      }
+      
+      const response = await fetch('/api/modifyPermissions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -114,7 +151,7 @@ const AdminManagement = () => {
         },
         body: JSON.stringify({
           account: account,
-          func_permissions: newPermissions
+          func_permissions: validatedPermissions.map(p => p as string)
         })
       });
 
@@ -134,23 +171,23 @@ const AdminManagement = () => {
   // 角色切換
   const toggleUserRole = async (user: User) => {
     const currentRole = getUserRoleType(user.func_permissions);
-    let newPermissions: string[];
+    let newPermissions: Permission[];
     
     switch (currentRole) {
       case 'admin':
-        newPermissions = ['user'];
+        newPermissions = ['view_data' as Permission];
         break;
       case 'user':
-        newPermissions = ['admin'];
+        newPermissions = ['create_user', 'modify_user', 'get_users', 'modify_lab', 'get_labs', 'view_data', 'control_machine', 'change_password'] as Permission[];
         break;
       case 'lab_manager':
-        newPermissions = ['user'];
+        newPermissions = ['view_data' as Permission];
         break;
       case 'data_viewer':
-        newPermissions = ['user'];
+        newPermissions = ['view_data' as Permission];
         break;
       default:
-        newPermissions = ['admin'];
+        newPermissions = ['create_user', 'modify_user', 'get_users', 'modify_lab', 'get_labs', 'view_data', 'control_machine', 'change_password'] as Permission[];
     }
     
     await modifyUserPermissions(user.account, newPermissions);
@@ -165,23 +202,90 @@ const AdminManagement = () => {
     }
     
     try {
-      const response = await fetch('http://13.211.240.55/api/createUser', {
+      // 驗證新用戶的權限
+      const validatedPermissions = validatePermissions(newUser.func_permissions.map(p => p as string));
+      
+      console.log('原始權限:', newUser.func_permissions);
+      console.log('驗證後權限:', validatedPermissions);
+      
+      // 檢查是否為空權限
+      if (validatedPermissions.length === 0) {
+        console.warn('權限為空，使用默認權限');
+        validatedPermissions.push('view_data', 'change_password');
+      }
+      
+      // 檢查權限組合是否合理
+      console.log('權限組合檢查:');
+      console.log('- 包含管理權限:', validatedPermissions.includes('create_user') || validatedPermissions.includes('modify_user'));
+      console.log('- 包含查看權限:', validatedPermissions.includes('view_data'));
+      console.log('- 包含基本權限:', validatedPermissions.includes('change_password'));
+      
+      if (validatedPermissions.length !== newUser.func_permissions.length) {
+        const invalidPermissions = newUser.func_permissions.filter(p => !isValidPermission(p as string));
+        console.warn('發現無效權限:', invalidPermissions);
+        alert(`發現無效權限: ${invalidPermissions.join(', ')}。已自動過濾。`);
+      }
+      
+      // 確保權限數組是字符串數組
+      const permissionsArray = validatedPermissions.map(p => p as string);
+      
+      const requestBody = {
+        account: newUser.account,
+        password: newUser.password,
+        func_permissions: permissionsArray,
+        company: newUser.company
+      };
+      
+      console.log('發送給後端的數據:', requestBody);
+      console.log('權限數組類型:', typeof validatedPermissions);
+      console.log('權限數組內容:', validatedPermissions);
+      console.log('JSON字符串化後:', JSON.stringify(requestBody));
+      
+      const response = await fetch('/api/createUser', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify({
-          account: newUser.account,
-          password: newUser.password,
-          func_permissions: newUser.func_permissions,
-          company: newUser.company
-        })
+        body: JSON.stringify(requestBody)
       });
 
+      console.log('響應狀態:', response.status);
+      console.log('響應頭:', response.headers);
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || '創建用戶失敗');
+        let errorMessage = '創建用戶失敗';
+        let errorDetails = '';
+        
+        try {
+          // 嘗試讀取響應文本
+          const responseText = await response.text();
+          console.log('響應文本:', responseText);
+          
+          // 檢查是否是HTML錯誤頁面
+          if (responseText.includes('Internal Server Error') || responseText.includes('<html>')) {
+            errorMessage = '後端服務器內部錯誤';
+            errorDetails = '請檢查後端服務器狀態或聯繫管理員';
+          } else if (responseText) {
+            // 嘗試解析為JSON
+            try {
+              const errorData = JSON.parse(responseText);
+              errorMessage = errorData.message || errorMessage;
+              errorDetails = errorData.details || '';
+            } catch (jsonError) {
+              console.log('響應不是JSON格式，使用原始文本');
+              errorMessage = responseText || errorMessage;
+            }
+          }
+        } catch (e) {
+          console.error('無法讀取錯誤響應:', e);
+        }
+        
+        const fullErrorMessage = errorDetails 
+          ? `${errorMessage} (狀態碼: ${response.status}) - ${errorDetails}`
+          : `${errorMessage} (狀態碼: ${response.status})`;
+          
+        throw new Error(fullErrorMessage);
       }
 
       alert('用戶創建成功！');
@@ -216,11 +320,12 @@ const AdminManagement = () => {
     }
     
     try {
+      const token = localStorage.getItem('token') || localStorage.getItem('access_token');
       const response = await fetch('http://13.211.240.55/api/modifyPermissions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           account: editingUser.account,
@@ -229,8 +334,18 @@ const AdminManagement = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || '修改用戶失敗');
+        const errorText = await response.text();
+        console.error('API 錯誤回應:', errorText);
+        
+        let errorMessage = '修改用戶失敗';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorData.detail || '修改用戶失敗';
+        } catch (e) {
+          errorMessage = `修改用戶失敗 (${response.status})`;
+        }
+        
+        throw new Error(errorMessage);
       }
 
       alert('用戶修改成功！');
@@ -302,7 +417,7 @@ const AdminManagement = () => {
             <div>
               <p className="text-sm text-gray-600">管理員</p>
               <p className="text-2xl font-bold text-gray-900">
-                {users.filter(u => u.func_permissions.includes('admin')).length}
+                {users.filter(u => u.func_permissions.includes('create_user' as Permission)).length}
               </p>
             </div>
             <UserPlus className="w-8 h-8 text-green-500" />
@@ -314,7 +429,7 @@ const AdminManagement = () => {
             <div>
               <p className="text-sm text-gray-600">一般用戶</p>
               <p className="text-2xl font-bold text-gray-900">
-                {users.filter(u => u.func_permissions.includes('user')).length}
+                {users.filter(u => u.func_permissions.includes('view_data' as Permission)).length}
               </p>
             </div>
             <Eye className="w-8 h-8 text-yellow-500" />
@@ -326,7 +441,7 @@ const AdminManagement = () => {
             <div>
               <p className="text-sm text-gray-600">實驗室管理員</p>
               <p className="text-2xl font-bold text-gray-900">
-                {users.filter(u => u.func_permissions.includes('lab_manager')).length}
+                {users.filter(u => u.func_permissions.includes('modify_lab' as Permission)).length}
               </p>
             </div>
             <Trash2 className="w-8 h-8 text-red-500" />
@@ -418,7 +533,7 @@ const AdminManagement = () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        user.func_permissions.includes('admin') 
+                        user.func_permissions.includes('create_user' as Permission) 
                           ? 'bg-blue-100 text-blue-800' 
                           : 'bg-gray-100 text-gray-800'
                       }`}>
@@ -508,21 +623,47 @@ const AdminManagement = () => {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    權限
+                    角色
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <select
+                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={newUser.irole || ''}
+                    onChange={(e) => {
+                      const selectedRole = e.target.value;
+                      const role = roleOptions.find(r => r.value === selectedRole);
+                      setNewUser({
+                        ...newUser,
+                        irole: selectedRole,
+                        func_permissions: role ? role.permissions : []
+                      });
+                    }}
+                  >
+                    <option value="">請選擇角色</option>
+                    {roleOptions.map((role) => (
+                      <option key={role.value} value={role.value}>
+                        {role.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    權限 (根據角色自動分配，可手動調整)
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
                     {permissionOptions.map(option => (
                       <label key={option.value} className="flex items-center">
                         <input
                           type="checkbox"
                           value={option.value}
-                          checked={newUser.func_permissions.includes(option.value)}
+                          checked={newUser.func_permissions.includes(option.value as Permission)}
                           onChange={(e) => {
                             const newPermissions = [...newUser.func_permissions];
                             if (e.target.checked) {
-                              newPermissions.push(option.value);
+                              newPermissions.push(option.value as Permission);
                             } else {
-                              newPermissions.splice(newPermissions.indexOf(option.value), 1);
+                              newPermissions.splice(newPermissions.indexOf(option.value as Permission), 1);
                             }
                             setNewUser({...newUser, func_permissions: newPermissions});
                           }}
@@ -593,21 +734,47 @@ const AdminManagement = () => {
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              權限
+              角色
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <select
+              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={editingUser.irole || ''}
+              onChange={(e) => {
+                const selectedRole = e.target.value;
+                const role = roleOptions.find(r => r.value === selectedRole);
+                setEditingUser({
+                  ...editingUser,
+                  irole: selectedRole,
+                  func_permissions: role ? role.permissions : []
+                });
+              }}
+            >
+              <option value="">請選擇角色</option>
+              {roleOptions.map((role) => (
+                <option key={role.value} value={role.value}>
+                  {role.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              權限 (根據角色自動分配，可手動調整)
+            </label>
+            <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
               {permissionOptions.map(option => (
                 <label key={option.value} className="flex items-center">
                   <input
                     type="checkbox"
                     value={option.value}
-                    checked={editingUser.func_permissions.includes(option.value)}
+                    checked={editingUser.func_permissions.includes(option.value as Permission)}
                     onChange={(e) => {
                       const newPermissions = [...editingUser.func_permissions];
                       if (e.target.checked) {
-                        newPermissions.push(option.value);
+                        newPermissions.push(option.value as Permission);
                       } else {
-                        newPermissions.splice(newPermissions.indexOf(option.value), 1);
+                        newPermissions.splice(newPermissions.indexOf(option.value as Permission), 1);
                       }
                       setEditingUser({...editingUser, func_permissions: newPermissions});
                     }}

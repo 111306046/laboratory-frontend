@@ -1,6 +1,23 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
+async function api(data: { account: string; password: string }) {
+  const res = await fetch("http://13.211.240.55/api/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || errorData.message || "登入失敗");
+  }
+
+  return res.json();
+}
+
 const Login: React.FC = () => {
   // 添加狀態管理
   const [account, setAccount] = useState('');
@@ -20,37 +37,59 @@ const Login: React.FC = () => {
       return;
     }
     
-    setIsLoading(true);
-    setError('');
-    
     try {
+      setIsLoading(true);
+      setError('');
+      const data = await api({ account, password });
+      localStorage.setItem('token', data.access_token);
+      localStorage.setItem('user_account', account);
       
-      //調用api
-      const response = await fetch('http://13.211.240.55/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          account: account,  // *後端API使用'account'
-          password: password
-        })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || '登入失敗');
+      // 登入成功後，獲取用戶權限資訊
+      try {
+        const usersResponse = await fetch('http://13.211.240.55/api/getUsers', {
+          headers: {
+            'Authorization': `Bearer ${data.access_token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (usersResponse.ok) {
+          const usersData = await usersResponse.json();
+          // 找到當前用戶的權限
+          const currentUser = usersData.find((user: any) => user.account === account);
+          
+          if (currentUser && currentUser.func_permissions) {
+            localStorage.setItem('user_permissions', JSON.stringify(currentUser.func_permissions));
+          } else if (account === 'yezyez') {
+            // yezyez 超級使用者預設權限
+            const permissions = [
+              'view_data', 'create_user', 'modify_user', 'get_users',
+              'modify_lab', 'get_labs', 'view_alerts', 'view_statistics',
+              'control_machine', 'change_password'
+            ];
+            localStorage.setItem('user_permissions', JSON.stringify(permissions));
+          } else {
+            // 其他用戶預設基本權限
+            localStorage.setItem('user_permissions', JSON.stringify(['view_data', 'change_password']));
+          }
+        }
+      } catch (permissionError) {
+        console.error('獲取用戶權限失敗:', permissionError);
+        // 如果獲取權限失敗，設定預設權限
+        if (account === 'yezyez') {
+          localStorage.setItem('user_permissions', JSON.stringify([
+            'view_data', 'create_user', 'modify_user', 'get_users',
+            'modify_lab', 'get_labs', 'view_alerts', 'view_statistics',
+            'control_machine', 'change_password'
+          ]));
+        } else {
+          localStorage.setItem('user_permissions', JSON.stringify(['view_data', 'change_password']));
+        }
       }
       
-      const data = await response.json();
-      
-      // 存儲登入token
-      localStorage.setItem('token', data.access_token);
-      
-      // 登入成功導到主頁
       navigate('/dashboard');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '登入失敗');
+    } catch (err: any) {
+      setError(err?.message || '登入失敗');
       console.error('登入失敗:', err);
     } finally {
       setIsLoading(false);
@@ -74,8 +113,8 @@ const Login: React.FC = () => {
               帳號
             </label>
             <input
-              id="accoint"
-              type="account"
+              id="account"
+              type="text"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               placeholder="請輸入帳號"
               value={account}

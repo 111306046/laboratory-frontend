@@ -63,7 +63,7 @@ const LaboratoryManagement = () => {
       setIsLoading(true);
       setError('');
       
-      const response = await fetch('http://13.211.240.55/api/getLabs', {
+      const response = await fetch('/api/getLabs', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -105,7 +105,7 @@ const LaboratoryManagement = () => {
     }
     
     try {
-      const response = await fetch('http://13.211.240.55/api/createLab', {
+      const response = await fetch('/api/createLab', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -148,7 +148,7 @@ const LaboratoryManagement = () => {
     }
     
     try {
-      const response = await fetch('http://13.211.240.55/api/modifyLab', {
+      const response = await fetch('/api/modifyLab', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -211,7 +211,7 @@ const LaboratoryManagement = () => {
         sensors: [...managingSensorsLab.sensors, sensorToAdd]
       };
 
-      const response = await fetch('http://13.211.240.55/api/modifyLab', {
+      const response = await fetch('/api/modifyLab', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -252,7 +252,7 @@ const LaboratoryManagement = () => {
           sensors: updatedSensors
         };
 
-        const response = await fetch('http://13.211.240.55/api/modifyLab', {
+        const response = await fetch('/api/modifyLab', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

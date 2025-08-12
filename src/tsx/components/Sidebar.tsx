@@ -90,7 +90,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       { title: '首頁', path: '/dashboard', icon: <FiHome size={20} />, requiredPermission: 'none' }, // 所有人都可以訪問
       { title: '數據記錄', path: '/data-records', icon: <FiDatabase size={20} />, requiredPermission: 'view_data' },
       { title: '警報設置', path: '/alert', icon: <FiAlertCircle size={20} />, requiredPermission: 'view_alerts' },
-      { title: '統計圖表', path: '/statistics', icon: <FiBarChart2 size={20} />, requiredPermission: 'view_statistics' },
+      { title: '統計圖表', path: '/static-chart', icon: <FiBarChart2 size={20} />, requiredPermission: 'view_statistics' },
       { title: '用戶管理', path: '/PU-addusers', icon: <FiUser size={20} />, requiredPermission: 'get_users' },
       { title: '實驗室管理', path: '/PU-laboratarymnagement', icon: <FiSettings size={20} />, requiredPermission: 'get_labs' }
     ];

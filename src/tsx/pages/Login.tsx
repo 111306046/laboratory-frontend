@@ -164,11 +164,7 @@ const Login: React.FC = () => {
           </button>
         </form>
         
-        <div className="mt-4 text-center">
-          <p className="text-sm text-gray-600">
-            還沒有帳號？ <Link to="/register" className="text-blue-600 hover:underline">註冊帳號</Link>
-          </p>
-        </div>
+
       </div>
     </div>
   );

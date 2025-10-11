@@ -23,7 +23,6 @@ function App() {
         <Route path="/alert" element={<ProtectedRoute><Layout><Alert /></Layout></ProtectedRoute>} />
         <Route path="/static-chart" element={<ProtectedRoute><Layout><StaticChart /></Layout></ProtectedRoute>} />
 
-
       </Routes>
     </BrowserRouter>
   );

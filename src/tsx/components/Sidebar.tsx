@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiHome, FiUser, FiSettings, FiMenu, FiLogOut, FiDatabase, FiAlertCircle, FiBarChart2, FiBell } from 'react-icons/fi';
+import { FiHome, FiUser, FiSettings, FiMenu, FiLogOut, FiDatabase, FiAlertCircle, FiBarChart2 } from 'react-icons/fi';
 
 interface SidebarProps {
   sidebarOpen: boolean;
@@ -92,7 +92,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       { title: '警報設置', path: '/alert', icon: <FiAlertCircle size={20} />, requiredPermission: 'view_alerts' },
       { title: '統計圖表', path: '/static-chart', icon: <FiBarChart2 size={20} />, requiredPermission: 'view_statistics' },
       { title: '用戶管理', path: '/PU-addusers', icon: <FiUser size={20} />, requiredPermission: 'get_users' },
-      { title: '實驗室管理', path: '/PU-laboratarymnagement', icon: <FiSettings size={20} />, requiredPermission: 'get_labs' }
+      { title: '實驗室管理', path: '/PU-laboratarymnagement', icon: <FiSettings size={20} />, requiredPermission: 'get_labs' },
     ];
 
     return allNavItems.filter(item => {

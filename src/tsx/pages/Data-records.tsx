@@ -1,25 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Calendar, Download, RefreshCw, Database, AlertTriangle, CheckCircle, XCircle, Wifi, WifiOff } from 'lucide-react';
+import { getRecentData, searchData, SensorData, ExcelResponse, downloadExcelFile } from '../services/api';
 
-// 數據記錄介面定義
-interface DataRecord {
-  id: string;
-  timestamp: string;
-  co2: number;
-  o2: number;
-  ch2o: number;
-  co: number;
-  nh3: number;
-  humidity: number;
-  o3: number;
-  status: 'normal' | 'warning' | 'critical';
-}
+// 使用從 API 服務導入的 SensorData 介面
+type DataRecord = SensorData & { id: string };
 
 const DataRecords: React.FC = () => {
   // 狀態管理
   const [records, setRecords] = useState<DataRecord[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
+  const [successMessage, setSuccessMessage] = useState<string>('');
   const [connectionStatus, setConnectionStatus] = useState<string>('connected');
   const [lastSync, setLastSync] = useState<Date>(new Date());
   
@@ -28,116 +19,97 @@ const DataRecords: React.FC = () => {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateRange, setDateRange] = useState<string>('last7days'); // 新增：日期範圍選擇，預設為最近7天
+  
+  // 新增：實驗室和機器選擇
+  const [selectedCompanyLab] = useState<string>('nccu_lab');
+  const [selectedMachine] = useState<string>('aq');
+  const [dataCount] = useState<number>(100);
   
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [itemsPerPage] = useState<number>(20);
   
+  // 初始化為顯示最近數據（不設置日期範圍）
+  useEffect(() => {
+    setDateRange('custom');
+    setStartDate('');
+    setEndDate('');
+  }, []);
+
   // 獲取數據記錄
   useEffect(() => {
     const fetchDataRecords = async () => {
       try {
         setIsLoading(true);
         setConnectionStatus('connecting');
-        
-        // 構建查詢參數
-        const queryParams = new URLSearchParams({
-          page: currentPage.toString(),
-          limit: itemsPerPage.toString(),
-          search: searchTerm,
-          startDate,
-          endDate,
-          status: statusFilter === 'all' ? '' : statusFilter
-        });
-        
-        // 模擬數據 - 實際使用時替換為真實 API
-        const mockData = [
-          {
-            id: '1',
-            timestamp: '2025-01-22T10:30:00Z',
-            co2: 420,
-            o2: 20.9,
-            ch2o: 0.08,
-            co: 0.001,
-            nh3: 0.5,
-            humidity: 65,
-            o3: 0.03,
-            status: 'normal' as const
-          },
-          {
-            id: '2',
-            timestamp: '2025-01-22T10:25:00Z',
-            co2: 850,
-            o2: 19.5,
-            ch2o: 0.15,
-            co: 0.003,
-            nh3: 1.2,
-            humidity: 75,
-            o3: 0.08,
-            status: 'warning' as const
-          },
-          {
-            id: '3',
-            timestamp: '2025-01-22T10:20:00Z',
-            co2: 1200,
-            o2: 18.5,
-            ch2o: 0.25,
-            co: 0.008,
-            nh3: 2.5,
-            humidity: 85,
-            o3: 0.15,
-            status: 'critical' as const
-          }
-        ];
-        
-        // 模擬 API 延遲
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        setRecords(mockData);
-        setConnectionStatus('connected');
-        setLastSync(new Date());
         setError('');
         
-        /*
-        // 實際 API 呼叫代碼
-        const response = await fetch(`http://your-server-address:port/api/data-records?${queryParams}`, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            // 'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
+        let data: SensorData[] = [];
         
-        if (!response.ok) {
-          throw new Error('無法獲取數據記錄');
+        if (startDate && endDate) {
+          // API 需要完整時間格式 YYYY-MM-DD HH:MM:SS
+          const startWithTime = `${startDate} 00:00:00`;
+          const endWithTime = `${endDate} 23:59:59`;
+          // 使用搜索 API - 可能返回 Excel 文件
+          const searchResult = await searchData({
+            company_lab: selectedCompanyLab,
+            machine: selectedMachine,
+            start: startWithTime,
+            end: endWithTime
+          });
+          
+          // 檢查是否為 Excel 響應
+          if (searchResult && typeof searchResult === 'object' && 'type' in searchResult && searchResult.type === 'excel') {
+            // 下載 Excel 文件
+            downloadExcelFile(searchResult as ExcelResponse);
+            setError(''); // 清除錯誤
+            setSuccessMessage(`Excel 文件已下載: ${(searchResult as ExcelResponse).filename}`);
+            setRecords([]); // 清空記錄，因為數據在 Excel 文件中
+            return;
+          } else {
+            // 正常的數據數組
+            data = searchResult as SensorData[];
+          }
+        } else {
+          // 使用最近數據 API
+          data = await getRecentData({
+            company_lab: selectedCompanyLab,
+            machine: selectedMachine,
+            number: dataCount
+          });
         }
         
-        const data = await response.json();
-        setRecords(data.records || []);
+        // 轉換數據格式並添加 ID
+        const formattedData: DataRecord[] = data.map((item, index) => ({
+          ...item,
+          id: `record_${index + 1}`,
+          timestamp: item.timestamp
+        }));
+        
+        setRecords(formattedData);
         setConnectionStatus('connected');
         setLastSync(new Date());
-        */
-        
+        setSuccessMessage(`成功載入 ${formattedData.length} 條數據記錄`);
       } catch (err) {
-        setConnectionStatus('error');
         setError(err instanceof Error ? err.message : '獲取數據失敗');
-        console.error('獲取數據記錄失敗:', err);
+        setConnectionStatus('error');
+        console.error('獲取數據失敗:', err);
       } finally {
         setIsLoading(false);
       }
     };
-
+    
     fetchDataRecords();
-  }, [currentPage, searchTerm, startDate, endDate, statusFilter]);
+  }, [currentPage, selectedCompanyLab, selectedMachine, dataCount, startDate, endDate, dateRange]);
   
   // 導出 CSV 功能
   const exportToCSV = () => {
-    const headers = ['ID', '日期時間', 'CO₂ (ppm)', 'O₂ (%)', 'CH₂O (ppm)', 'CO (%)', 'NH₃ (ppm)', '濕度 (%)', 'O₃ (ppm)', '狀態'];
+    const headers = ['ID', '日期時間', '機器', '溫度 (°C)', '濕度 (%)', 'PM2.5', 'PM10', 'PM2.5 平均', 'PM10 平均', 'CO₂ (ppm)', 'TVOC'];
     const csvContent = [
       headers.join(','),
       ...records.map(record => 
-        [record.id, record.timestamp, record.co2, record.o2, record.ch2o, record.co, record.nh3, record.humidity, record.o3, record.status].join(',')
+        [record.id, record.timestamp, record.machine, record.temperatu, record.humidity, record.pm25, record.pm10, record.pm25_ave, record.pm10_ave, record.co2, record.tvoc].join(',')
       )
     ].join('\n');
     
@@ -154,25 +126,101 @@ const DataRecords: React.FC = () => {
   const handleRefresh = () => {
     setCurrentPage(1);
     setError('');
+    setSuccessMessage('');
+  };
+
+  // 顯示最近數據（清除日期範圍）
+  const showRecentData = () => {
+    setStartDate('');
+    setEndDate('');
+    setDateRange('custom');
+    setCurrentPage(1);
   };
   
-  // 狀態樣式
-  const getStatusBadge = (status: string) => {
-    const styles = {
-      normal: 'bg-green-100 text-green-800',
-      warning: 'bg-yellow-100 text-yellow-800',
-      critical: 'bg-red-100 text-red-800'
-    };
-    return styles[status as keyof typeof styles] || styles.normal;
-  };
+  // 狀態樣式（保留以備將來使用）
+  // const getStatusBadge = (status: string) => {
+  //   const styles = {
+  //     normal: 'bg-green-100 text-green-800',
+  //     warning: 'bg-yellow-100 text-yellow-800',
+  //     critical: 'bg-red-100 text-red-800'
+  //   };
+  //   return styles[status as keyof typeof styles] || styles.normal;
+  // };
   
   // 格式化日期
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('zh-TW');
   };
+
+  // 日期範圍處理函數
+  const handleDateRangeChange = (range: string) => {
+    setDateRange(range);
+    const today = new Date();
+    // 使用本地時區格式避免因 UTC 造成日期偏移
+    const formatDateForInput = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    switch (range) {
+      case 'today':
+        setStartDate(formatDateForInput(today));
+        setEndDate(formatDateForInput(today));
+        break;
+      case 'yesterday':
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        setStartDate(formatDateForInput(yesterday));
+        setEndDate(formatDateForInput(yesterday));
+        break;
+      case 'last7days':
+        const last7Days = new Date(today);
+        last7Days.setDate(last7Days.getDate() - 7);
+        setStartDate(formatDateForInput(last7Days));
+        setEndDate(formatDateForInput(today));
+        break;
+      case 'last30days':
+        const last30Days = new Date(today);
+        last30Days.setDate(last30Days.getDate() - 30);
+        setStartDate(formatDateForInput(last30Days));
+        setEndDate(formatDateForInput(today));
+        break;
+      case 'last90days':
+        const last90Days = new Date(today);
+        last90Days.setDate(last90Days.getDate() - 90);
+        setStartDate(formatDateForInput(last90Days));
+        setEndDate(formatDateForInput(today));
+        break;
+      case 'thisMonth':
+        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        setStartDate(formatDateForInput(firstDayOfMonth));
+        setEndDate(formatDateForInput(today));
+        break;
+      case 'lastMonth':
+        const firstDayOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const lastDayOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+        setStartDate(formatDateForInput(firstDayOfLastMonth));
+        setEndDate(formatDateForInput(lastDayOfLastMonth));
+        break;
+      case 'thisYear':
+        const firstDayOfYear = new Date(today.getFullYear(), 0, 1);
+        setStartDate(formatDateForInput(firstDayOfYear));
+        setEndDate(formatDateForInput(today));
+        break;
+      case 'custom':
+        // 保持當前選擇的日期
+        break;
+      default:
+        break;
+    }
+  };
   
   // 計算總頁數
   const totalPages = Math.ceil(records.length / itemsPerPage);
+  const pageStartIndex = (currentPage - 1) * itemsPerPage;
+  const pagedRecords = records.slice(pageStartIndex, pageStartIndex + itemsPerPage);
 
   if (isLoading && records.length === 0) {
     return (
@@ -255,6 +303,46 @@ const DataRecords: React.FC = () => {
               </div>
             </div>
           )}
+          
+          {/* 成功訊息 */}
+          {successMessage && (
+            <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-500" />
+                <span className="text-green-700">{successMessage}</span>
+                <button
+                  onClick={() => setSuccessMessage('')}
+                  className="ml-auto text-green-500 hover:text-green-700"
+                >
+                  <XCircle className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* 當前日期範圍顯示 */}
+          {startDate && endDate && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-blue-500" />
+                <span className="text-blue-700 text-sm">
+                  當前查詢範圍: {startDate} 至 {endDate}
+                  {dateRange !== 'custom' && (
+                    <span className="ml-2 text-blue-600 font-medium">
+                      ({dateRange === 'today' ? '今天' :
+                        dateRange === 'yesterday' ? '昨天' :
+                        dateRange === 'last7days' ? '最近 7 天' :
+                        dateRange === 'last30days' ? '最近 30 天' :
+                        dateRange === 'last90days' ? '最近 90 天' :
+                        dateRange === 'thisMonth' ? '本月' :
+                        dateRange === 'lastMonth' ? '上月' :
+                        dateRange === 'thisYear' ? '今年' : '自訂範圍'})
+                    </span>
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -262,7 +350,7 @@ const DataRecords: React.FC = () => {
           <div className="lg:col-span-3">
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">搜索與篩選</h2>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 {/* 搜索框 */}
                 <div className="relative">
                   <Search className="absolute left-3 top-3 text-gray-400" size={16} />
@@ -275,6 +363,26 @@ const DataRecords: React.FC = () => {
                   />
                 </div>
                 
+                {/* 日期範圍選擇器 */}
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-3 text-gray-400" size={16} />
+                  <select
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                    value={dateRange}
+                    onChange={(e) => handleDateRangeChange(e.target.value)}
+                  >
+                    <option value="custom">自訂日期範圍</option>
+                    <option value="today">今天</option>
+                    <option value="yesterday">昨天</option>
+                    <option value="last7days">最近 7 天</option>
+                    <option value="last30days">最近 30 天</option>
+                    <option value="last90days">最近 90 天</option>
+                    <option value="thisMonth">本月</option>
+                    <option value="lastMonth">上月</option>
+                    <option value="thisYear">今年</option>
+                  </select>
+                </div>
+                
                 {/* 開始日期 */}
                 <div className="relative">
                   <Calendar className="absolute left-3 top-3 text-gray-400" size={16} />
@@ -282,7 +390,11 @@ const DataRecords: React.FC = () => {
                     type="date"
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
+                    onChange={(e) => {
+                      setStartDate(e.target.value);
+                      setDateRange('custom'); // 手動選擇日期時設為自訂
+                    }}
+                    disabled={dateRange !== 'custom'}
                   />
                 </div>
                 
@@ -293,7 +405,11 @@ const DataRecords: React.FC = () => {
                     type="date"
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
+                    onChange={(e) => {
+                      setEndDate(e.target.value);
+                      setDateRange('custom'); // 手動選擇日期時設為自訂
+                    }}
+                    disabled={dateRange !== 'custom'}
                   />
                 </div>
                 
@@ -310,6 +426,17 @@ const DataRecords: React.FC = () => {
                     <option value="critical">嚴重</option>
                   </select>
                 </div>
+
+                {/* 顯示最近數據按鈕 */}
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={showRecentData}
+                    className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                  >
+                    顯示最近數據
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -323,69 +450,73 @@ const DataRecords: React.FC = () => {
                         日期時間
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        CO₂ (ppm)
+                        機器
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        O₂ (%)
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        CH₂O (ppm)
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        CO (%)
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        NH₃ (ppm)
+                        溫度 (°C)
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         濕度 (%)
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        O₃ (ppm)
+                        PM2.5
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        狀態
+                        PM10
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        PM2.5 平均
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        PM10 平均
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        CO₂ (ppm)
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        TVOC
                       </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {records.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
+                        <td colSpan={10} className="px-6 py-12 text-center text-gray-500">
                           沒有找到數據記錄
                         </td>
                       </tr>
                     ) : (
-                      records.map((record) => (
+                      pagedRecords.map((record) => (
                         <tr key={record.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {formatDate(record.timestamp)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.co2}
+                            {record.machine}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.o2}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.ch2o}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.co}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.nh3}
+                            {record.temperatu}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {record.humidity}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.o3}
+                            {record.pm25}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(record.status)}`}>
-                              {record.status === 'normal' ? '正常' : record.status === 'warning' ? '警告' : '嚴重'}
-                            </span>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {record.pm10}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {record.pm25_ave}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {record.pm10_ave}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {record.co2}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {record.tvoc}
                           </td>
                         </tr>
                       ))
@@ -416,8 +547,8 @@ const DataRecords: React.FC = () => {
                   <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                     <div>
                       <p className="text-sm text-gray-700">
-                        顯示第 <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> 到{' '}
-                        <span className="font-medium">{Math.min(currentPage * itemsPerPage, records.length)}</span> 項，
+                        顯示第 <span className="font-medium">{records.length === 0 ? 0 : pageStartIndex + 1}</span> 到{' '}
+                        <span className="font-medium">{Math.min(pageStartIndex + itemsPerPage, records.length)}</span> 項，
                         共 <span className="font-medium">{records.length}</span> 項結果
                       </p>
                     </div>

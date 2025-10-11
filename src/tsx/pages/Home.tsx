@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { wsService, getRecentData, SensorData } from '../services/api';
 
 // 保留數據介面定義
 interface LabData {
@@ -11,17 +12,9 @@ interface LabData {
   o3: number;
 }
 
-interface Sensor {
-  name: string;
-  value: number;
-  type: string;
-}
+// 移除未使用的 Sensor 介面
 
-interface Laboratory {
-  id: string;
-  name: string;
-  sensors: Sensor[];
-}
+// 移除未使用的 Laboratory 介面
 
 const Home: React.FC = () => {
   // 彙總所有實驗室感測器的平均值
@@ -36,60 +29,92 @@ const Home: React.FC = () => {
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
+  const [wsConnected, setWsConnected] = useState<boolean>(false);
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
   useEffect(() => {
-    const fetchLabData = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setError('未找到認證令牌');
+      setIsLoading(false);
+      return;
+    }
+
+    // 初始數據獲取
+    const fetchInitialData = async () => {
       try {
         setIsLoading(true);
         setError('');
-        const response = await fetch('/api/getLabs', {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
+        
+        // 獲取最近的數據
+        const recentData = await getRecentData({
+          company_lab: 'nccu_lab',
+          machine: 'aq',
+          number: 1
         });
-        if (!response.ok) throw new Error('無法獲取實驗室數據');
-        const labs: Laboratory[] = await response.json();
-        // 彙總所有感測器數據
-        const sum: LabData = {
-          co2: 0, o2: 0, ch2o: 0, co: 0, nh3: 0, humidity: 0, o3: 0
-        };
-        let count: LabData = {
-          co2: 0, o2: 0, ch2o: 0, co: 0, nh3: 0, humidity: 0, o3: 0
-        };
-        labs.forEach(lab => {
-          lab.sensors?.forEach(sensor => {
-            const type = sensor.type.toLowerCase();
-            if (type in sum) {
-              // @ts-ignore
-              sum[type] += Number(sensor.value) || 0;
-              // @ts-ignore
-              count[type] += 1;
-            }
+        
+        if (recentData.length > 0) {
+          const latestData = recentData[0];
+          setLabData({
+            co2: Math.round(latestData.co2),
+            o2: Math.round(latestData.o2 * 100) / 100,
+            ch2o: Math.round(latestData.ch2o * 100) / 100,
+            co: Math.round(latestData.co * 1000) / 1000,
+            nh3: Math.round(latestData.nh3 * 100) / 100,
+            humidity: Math.round(latestData.humidity),
+            o3: Math.round(latestData.o3 * 100) / 100
           });
-        });
-        // 計算平均值
-        setLabData({
-          co2: count.co2 ? Math.round(sum.co2 / count.co2) : 0,
-          o2: count.o2 ? Math.round(sum.o2 / count.o2) : 0,
-          ch2o: count.ch2o ? Math.round(sum.ch2o / count.ch2o) : 0,
-          co: count.co ? Math.round(sum.co / count.co) : 0,
-          nh3: count.nh3 ? Math.round(sum.nh3 / count.nh3) : 0,
-          humidity: count.humidity ? Math.round(sum.humidity / count.humidity) : 0,
-          o3: count.o3 ? Math.round(sum.o3 / count.o3) : 0
-        });
+          setLastUpdate(new Date());
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : '獲取數據失敗');
-        console.error('獲取數據失敗:', err);
+        setError(err instanceof Error ? err.message : '獲取初始數據失敗');
+        console.error('獲取初始數據失敗:', err);
       } finally {
         setIsLoading(false);
       }
     };
-    fetchLabData();
-    const intervalId = setInterval(fetchLabData, 60000);
-    return () => clearInterval(intervalId);
+
+    // 設置 WebSocket 連接
+    const setupWebSocket = () => {
+      wsService.connect(token, 'nccu_lab');
+      
+      wsService.on('connected', () => {
+        setWsConnected(true);
+        console.log('WebSocket 已連接');
+      });
+      
+      wsService.on('disconnected', () => {
+        setWsConnected(false);
+        console.log('WebSocket 已斷開');
+      });
+      
+      wsService.on('data', (data: SensorData) => {
+        // 更新即時數據
+        setLabData({
+          co2: Math.round(data.co2),
+          o2: Math.round(data.o2 * 100) / 100,
+          ch2o: Math.round(data.ch2o * 100) / 100,
+          co: Math.round(data.co * 1000) / 1000,
+          nh3: Math.round(data.nh3 * 100) / 100,
+          humidity: Math.round(data.humidity),
+          o3: Math.round(data.o3 * 100) / 100
+        });
+        setLastUpdate(new Date());
+      });
+      
+      wsService.on('error', (error: any) => {
+        console.error('WebSocket 錯誤:', error);
+        setError('WebSocket 連接錯誤');
+      });
+    };
+
+    fetchInitialData();
+    setupWebSocket();
+
+    // 清理函數
+    return () => {
+      wsService.disconnect();
+    };
   }, []);
 
   // 返回主內容
@@ -98,8 +123,18 @@ const Home: React.FC = () => {
       {/* 頂部標題欄 */}
       <div className="bg-white shadow-sm p-4 flex justify-between items-center">
         <h1 className="text-xl font-medium">實驗室監測儀表板</h1>
-        <div className="flex items-center">
-          {/* 可以在這裡添加其他頂部工具欄項目，如通知圖標等 */}
+        <div className="flex items-center space-x-4">
+          {/* WebSocket 連接狀態 */}
+          <div className="flex items-center space-x-2">
+            <div className={`w-3 h-3 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            <span className="text-sm text-gray-600">
+              {wsConnected ? '即時連接' : '連接中斷'}
+            </span>
+          </div>
+          {/* 最後更新時間 */}
+          <div className="text-sm text-gray-500">
+            最後更新: {lastUpdate.toLocaleTimeString()}
+          </div>
         </div>
       </div>
       

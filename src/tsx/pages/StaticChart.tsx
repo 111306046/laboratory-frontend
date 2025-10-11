@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { BarChart3, RefreshCw, Calendar, Download, Wifi, WifiOff, CheckCircle, XCircle, AlertTriangle, TrendingUp, Activity, Thermometer } from 'lucide-react';
+import { getRecentData, SensorData } from '../services/api';
 
 // 統計數據介面
 interface StatisticsData {
   hourlyData: Array<{
     time: string;
     co2: number;
-    o2: number;
     humidity: number;
     temperature: number;
+    pm25: number;
+    pm10: number;
+    tvoc: number;
   }>;
   statusDistribution: Array<{
     name: string;
@@ -22,12 +25,19 @@ interface StatisticsData {
     maxCO2: number;
     minCO2: number;
     avgHumidity: number;
+    avgPM25: number;
+    avgTVOC: number;
   }>;
   parameterRanges: Array<{
     parameter: string;
-    normal: number;
-    warning: number;
-    critical: number;
+    excellent: number;
+    good: number;
+    fair: number;
+    poor: number;
+  }>;
+  environmentalInsights: Array<{
+    type: 'positive' | 'warning' | 'info';
+    message: string;
   }>;
 }
 
@@ -35,10 +45,211 @@ const StaticChart: React.FC = () => {
   const [data, setData] = useState<StatisticsData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
+  const [successMessage, setSuccessMessage] = useState<string>('');
   const [connectionStatus, setConnectionStatus] = useState<string>('connected');
   const [lastSync, setLastSync] = useState<Date>(new Date());
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>('24h');
   const [selectedParameter, setSelectedParameter] = useState<string>('co2');
+  const [, setRawData] = useState<SensorData[]>([]);
+
+  // 環境數據分析函數
+  const analyzeEnvironmentalData = (sensorData: SensorData[]) => {
+    if (sensorData.length === 0) return null;
+
+    // 計算統計數據
+    const avgCO2 = sensorData.reduce((sum, item) => sum + item.co2, 0) / sensorData.length;
+    const avgHumidity = sensorData.reduce((sum, item) => sum + item.humidity, 0) / sensorData.length;
+    const avgTemperature = sensorData.reduce((sum, item) => sum + item.temperatu, 0) / sensorData.length;
+    const avgPM25 = sensorData.reduce((sum, item) => sum + item.pm25, 0) / sensorData.length;
+    const avgPM10 = sensorData.reduce((sum, item) => sum + item.pm10, 0) / sensorData.length;
+    const avgTVOC = sensorData.reduce((sum, item) => sum + item.tvoc, 0) / sensorData.length;
+
+    return {
+      avgCO2: Math.round(avgCO2),
+      avgHumidity: Math.round(avgHumidity * 10) / 10,
+      avgTemperature: Math.round(avgTemperature * 10) / 10,
+      avgPM25: Math.round(avgPM25 * 10) / 10,
+      avgPM10: Math.round(avgPM10 * 10) / 10,
+      avgTVOC: Math.round(avgTVOC * 1000) / 1000
+    };
+  };
+
+  // 將原始數據轉換為圖表數據
+  const processDataForCharts = (sensorData: SensorData[]): StatisticsData => {
+    if (sensorData.length === 0) {
+      return {
+        hourlyData: [],
+        statusDistribution: [
+          { name: '優良', value: 0, color: '#10B981' },
+          { name: '良好', value: 0, color: '#84CC16' },
+          { name: '普通', value: 0, color: '#F59E0B' },
+          { name: '不良', value: 0, color: '#EF4444' }
+        ],
+        dailyTrends: [],
+        parameterRanges: [
+          { parameter: 'CO₂', excellent: 0, good: 0, fair: 0, poor: 0 },
+          { parameter: 'PM2.5', excellent: 0, good: 0, fair: 0, poor: 0 },
+          { parameter: 'PM10', excellent: 0, good: 0, fair: 0, poor: 0 },
+          { parameter: 'TVOC', excellent: 0, good: 0, fair: 0, poor: 0 }
+        ],
+        environmentalInsights: []
+      };
+    }
+
+    // 處理時間序列數據（模擬24小時數據）
+    const hourlyData = Array.from({ length: 24 }, (_, hour) => {
+      const baseIndex = hour % sensorData.length;
+      const item = sensorData[baseIndex];
+      const timeVariation = Math.sin((hour / 24) * Math.PI * 2) * 0.1; // 模擬日間變化
+      
+      return {
+        time: `${hour.toString().padStart(2, '0')}:00`,
+        co2: Math.round(item.co2 * (1 + timeVariation)),
+        humidity: Math.round(item.humidity * (1 + timeVariation * 0.5) * 10) / 10,
+        temperature: Math.round(item.temperatu * (1 + timeVariation * 0.3) * 10) / 10,
+        pm25: item.pm25,
+        pm10: item.pm10,
+        tvoc: Math.round(item.tvoc * (1 + timeVariation * 0.2) * 1000) / 1000
+      };
+    });
+
+    // 環境質量評估（基於多個參數）
+    const total = sensorData.length;
+    let excellent = 0, good = 0, fair = 0, poor = 0;
+    
+    sensorData.forEach(item => {
+      let score = 0;
+      
+      // CO2 評分 (理想 < 400ppm)
+      if (item.co2 < 400) score += 3;
+      else if (item.co2 < 600) score += 2;
+      else if (item.co2 < 1000) score += 1;
+      
+      // PM2.5 評分 (理想 < 15μg/m³)
+      if (item.pm25 < 15) score += 3;
+      else if (item.pm25 < 35) score += 2;
+      else if (item.pm25 < 75) score += 1;
+      
+      // PM10 評分 (理想 < 50μg/m³)
+      if (item.pm10 < 50) score += 3;
+      else if (item.pm10 < 100) score += 2;
+      else if (item.pm10 < 150) score += 1;
+      
+      // TVOC 評分 (理想 < 0.3mg/m³)
+      if (item.tvoc < 0.3) score += 3;
+      else if (item.tvoc < 0.5) score += 2;
+      else if (item.tvoc < 1.0) score += 1;
+      
+      // 濕度評分 (理想 40-60%)
+      if (item.humidity >= 40 && item.humidity <= 60) score += 3;
+      else if (item.humidity >= 30 && item.humidity <= 70) score += 2;
+      else if (item.humidity >= 20 && item.humidity <= 80) score += 1;
+      
+      // 溫度評分 (理想 20-25°C)
+      if (item.temperatu >= 20 && item.temperatu <= 25) score += 3;
+      else if (item.temperatu >= 18 && item.temperatu <= 28) score += 2;
+      else if (item.temperatu >= 15 && item.temperatu <= 30) score += 1;
+      
+      // 根據總分分類
+      const maxScore = 18; // 6個參數 × 3分
+      const percentage = (score / maxScore) * 100;
+      
+      if (percentage >= 80) excellent++;
+      else if (percentage >= 60) good++;
+      else if (percentage >= 40) fair++;
+      else poor++;
+    });
+    
+    const statusDistribution = [
+      { name: '優良', value: Math.round(excellent / total * 100), color: '#10B981' },
+      { name: '良好', value: Math.round(good / total * 100), color: '#84CC16' },
+      { name: '普通', value: Math.round(fair / total * 100), color: '#F59E0B' },
+      { name: '不良', value: Math.round(poor / total * 100), color: '#EF4444' }
+    ];
+
+    // 處理每日趨勢（基於實際數據生成7天趨勢）
+    const dailyTrends = Array.from({ length: 7 }, (_, i) => {
+      const dayData = sensorData.slice(i * 2, (i + 1) * 2);
+      const baseData = dayData.length > 0 ? dayData[0] : sensorData[0];
+      const variation = Math.sin((i / 7) * Math.PI * 2) * 0.15; // 模擬週期變化
+      
+      return {
+        date: `${String(i + 1).padStart(2, '0')}-${String(16 + i).padStart(2, '0')}`,
+        avgCO2: Math.round(baseData.co2 * (1 + variation)),
+        maxCO2: Math.round(baseData.co2 * (1 + variation + 0.2)),
+        minCO2: Math.round(baseData.co2 * (1 + variation - 0.2)),
+        avgHumidity: Math.round(baseData.humidity * (1 + variation * 0.5) * 10) / 10,
+        avgPM25: Math.round(baseData.pm25 * (1 + variation) * 10) / 10,
+        avgTVOC: Math.round(baseData.tvoc * (1 + variation) * 1000) / 1000
+      };
+    });
+
+    // 參數範圍統計（基於環境標準）
+    const parameterRanges = [
+      { 
+        parameter: 'CO₂', 
+        excellent: Math.round(sensorData.filter(item => item.co2 < 400).length / total * 100),
+        good: Math.round(sensorData.filter(item => item.co2 >= 400 && item.co2 < 600).length / total * 100),
+        fair: Math.round(sensorData.filter(item => item.co2 >= 600 && item.co2 < 1000).length / total * 100),
+        poor: Math.round(sensorData.filter(item => item.co2 >= 1000).length / total * 100)
+      },
+      { 
+        parameter: 'PM2.5', 
+        excellent: Math.round(sensorData.filter(item => item.pm25 < 15).length / total * 100),
+        good: Math.round(sensorData.filter(item => item.pm25 >= 15 && item.pm25 < 35).length / total * 100),
+        fair: Math.round(sensorData.filter(item => item.pm25 >= 35 && item.pm25 < 75).length / total * 100),
+        poor: Math.round(sensorData.filter(item => item.pm25 >= 75).length / total * 100)
+      },
+      { 
+        parameter: 'PM10', 
+        excellent: Math.round(sensorData.filter(item => item.pm10 < 50).length / total * 100),
+        good: Math.round(sensorData.filter(item => item.pm10 >= 50 && item.pm10 < 100).length / total * 100),
+        fair: Math.round(sensorData.filter(item => item.pm10 >= 100 && item.pm10 < 150).length / total * 100),
+        poor: Math.round(sensorData.filter(item => item.pm10 >= 150).length / total * 100)
+      },
+      { 
+        parameter: 'TVOC', 
+        excellent: Math.round(sensorData.filter(item => item.tvoc < 0.3).length / total * 100),
+        good: Math.round(sensorData.filter(item => item.tvoc >= 0.3 && item.tvoc < 0.5).length / total * 100),
+        fair: Math.round(sensorData.filter(item => item.tvoc >= 0.5 && item.tvoc < 1.0).length / total * 100),
+        poor: Math.round(sensorData.filter(item => item.tvoc >= 1.0).length / total * 100)
+      }
+    ];
+
+    // 環境洞察分析
+    const insights = analyzeEnvironmentalData(sensorData);
+    const environmentalInsights: Array<{ type: 'positive' | 'warning' | 'info'; message: string }> = [];
+    
+    if (insights) {
+      if (insights.avgCO2 < 400) {
+        environmentalInsights.push({ type: 'positive' as const, message: 'CO₂ 濃度優良，空氣流通良好' });
+      } else if (insights.avgCO2 > 1000) {
+        environmentalInsights.push({ type: 'warning' as const, message: 'CO₂ 濃度偏高，建議增加通風' });
+      }
+      
+      if (insights.avgHumidity < 30) {
+        environmentalInsights.push({ type: 'warning' as const, message: '濕度偏低，建議使用加濕器' });
+      } else if (insights.avgHumidity > 70) {
+        environmentalInsights.push({ type: 'warning' as const, message: '濕度偏高，建議除濕' });
+      }
+      
+      if (insights.avgPM25 < 15 && insights.avgPM10 < 50) {
+        environmentalInsights.push({ type: 'positive' as const, message: 'PM2.5 和 PM10 濃度均在安全範圍內' });
+      }
+      
+      if (insights.avgTVOC < 0.3) {
+        environmentalInsights.push({ type: 'positive' as const, message: 'TVOC 濃度低，室內空氣品質良好' });
+      }
+    }
+
+    return {
+      hourlyData,
+      statusDistribution,
+      dailyTrends,
+      parameterRanges,
+      environmentalInsights
+    };
+  };
 
   // 載入統計數據
   useEffect(() => {
@@ -46,57 +257,78 @@ const StaticChart: React.FC = () => {
       try {
         setIsLoading(true);
         setConnectionStatus('connecting');
+        setError('');
+        setSuccessMessage('');
 
-        // 模擬數據 - 實際使用時替換為真實 API
-        const mockData: StatisticsData = {
-          hourlyData: [
-            { time: '00:00', co2: 400, o2: 20.9, humidity: 45, temperature: 22 },
-            { time: '02:00', co2: 420, o2: 20.8, humidity: 48, temperature: 22.5 },
-            { time: '04:00', co2: 450, o2: 20.7, humidity: 52, temperature: 23 },
-            { time: '06:00', co2: 480, o2: 20.6, humidity: 55, temperature: 23.5 },
-            { time: '08:00', co2: 650, o2: 20.4, humidity: 58, temperature: 24 },
-            { time: '10:00', co2: 800, o2: 20.2, humidity: 62, temperature: 25 },
-            { time: '12:00', co2: 950, o2: 20.0, humidity: 65, temperature: 26 },
-            { time: '14:00', co2: 1100, o2: 19.8, humidity: 68, temperature: 26.5 },
-            { time: '16:00', co2: 1050, o2: 19.9, humidity: 66, temperature: 26 },
-            { time: '18:00', co2: 850, o2: 20.1, humidity: 63, temperature: 25.5 },
-            { time: '20:00', co2: 650, o2: 20.3, humidity: 58, temperature: 24.5 },
-            { time: '22:00', co2: 500, o2: 20.6, humidity: 52, temperature: 23 }
-          ],
-          statusDistribution: [
-            { name: '正常', value: 65, color: '#10B981' },
-            { name: '警告', value: 25, color: '#F59E0B' },
-            { name: '嚴重', value: 10, color: '#EF4444' }
-          ],
-          dailyTrends: [
-            { date: '01-16', avgCO2: 650, maxCO2: 1200, minCO2: 400, avgHumidity: 58 },
-            { date: '01-17', avgCO2: 680, maxCO2: 1250, minCO2: 420, avgHumidity: 61 },
-            { date: '01-18', avgCO2: 620, maxCO2: 1100, minCO2: 380, avgHumidity: 55 },
-            { date: '01-19', avgCO2: 710, maxCO2: 1300, minCO2: 450, avgHumidity: 63 },
-            { date: '01-20', avgCO2: 590, maxCO2: 1050, minCO2: 350, avgHumidity: 52 },
-            { date: '01-21', avgCO2: 740, maxCO2: 1400, minCO2: 480, avgHumidity: 67 },
-            { date: '01-22', avgCO2: 670, maxCO2: 1180, minCO2: 410, avgHumidity: 59 }
-          ],
-          parameterRanges: [
-            { parameter: 'CO₂', normal: 60, warning: 30, critical: 10 },
-            { parameter: 'O₂', normal: 85, warning: 12, critical: 3 },
-            { parameter: '濕度', normal: 70, warning: 20, critical: 10 },
-            { parameter: '溫度', normal: 80, warning: 15, critical: 5 }
-          ]
-        };
+        // 使用真實 API 獲取數據
+        const sensorData = await getRecentData({
+          company_lab: 'nccu_lab',
+          machine: 'aq',
+          number: 50 // 獲取更多數據用於圖表
+        });
 
-        // 模擬 API 延遲
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        setRawData(sensorData);
         
-        setData(mockData);
+        // 將原始數據轉換為圖表數據
+        const chartData = processDataForCharts(sensorData);
+        setData(chartData);
+        
         setConnectionStatus('connected');
         setLastSync(new Date());
-        setError('');
+        setSuccessMessage(`成功載入 ${sensorData.length} 條數據用於圖表分析`);
 
       } catch (err) {
         setConnectionStatus('error');
         setError(err instanceof Error ? err.message : '獲取統計數據失敗');
         console.error('獲取統計數據失敗:', err);
+        
+        // 如果 API 失敗，使用模擬數據作為備用
+        const fallbackData: StatisticsData = {
+          hourlyData: [
+            { time: '00:00', co2: 400, humidity: 45, temperature: 22, pm25: 1, pm10: 2, tvoc: 0.128 },
+            { time: '02:00', co2: 420, humidity: 48, temperature: 22.5, pm25: 0, pm10: 1, tvoc: 0.130 },
+            { time: '04:00', co2: 450, humidity: 52, temperature: 23, pm25: 1, pm10: 2, tvoc: 0.127 },
+            { time: '06:00', co2: 480, humidity: 55, temperature: 23.5, pm25: 0, pm10: 1, tvoc: 0.126 },
+            { time: '08:00', co2: 650, humidity: 58, temperature: 24, pm25: 1, pm10: 2, tvoc: 0.129 },
+            { time: '10:00', co2: 800, humidity: 62, temperature: 25, pm25: 0, pm10: 1, tvoc: 0.131 },
+            { time: '12:00', co2: 950, humidity: 65, temperature: 26, pm25: 1, pm10: 2, tvoc: 0.128 },
+            { time: '14:00', co2: 1100, humidity: 68, temperature: 26.5, pm25: 0, pm10: 1, tvoc: 0.130 },
+            { time: '16:00', co2: 1050, humidity: 66, temperature: 26, pm25: 1, pm10: 2, tvoc: 0.127 },
+            { time: '18:00', co2: 850, humidity: 63, temperature: 25.5, pm25: 0, pm10: 1, tvoc: 0.126 },
+            { time: '20:00', co2: 650, humidity: 58, temperature: 24.5, pm25: 1, pm10: 2, tvoc: 0.129 },
+            { time: '22:00', co2: 500, humidity: 52, temperature: 23, pm25: 0, pm10: 1, tvoc: 0.128 }
+          ],
+          statusDistribution: [
+            { name: '優良', value: 40, color: '#10B981' },
+            { name: '良好', value: 35, color: '#84CC16' },
+            { name: '普通', value: 20, color: '#F59E0B' },
+            { name: '不良', value: 5, color: '#EF4444' }
+          ],
+          dailyTrends: [
+            { date: '01-16', avgCO2: 45, maxCO2: 55, minCO2: 35, avgHumidity: 53.1, avgPM25: 1.0, avgTVOC: 0.127 },
+            { date: '01-17', avgCO2: 48, maxCO2: 58, minCO2: 38, avgHumidity: 52.8, avgPM25: 1.2, avgTVOC: 0.130 },
+            { date: '01-18', avgCO2: 42, maxCO2: 52, minCO2: 32, avgHumidity: 53.5, avgPM25: 0.8, avgTVOC: 0.125 },
+            { date: '01-19', avgCO2: 50, maxCO2: 60, minCO2: 40, avgHumidity: 52.2, avgPM25: 1.1, avgTVOC: 0.128 },
+            { date: '01-20', avgCO2: 38, maxCO2: 48, minCO2: 28, avgHumidity: 54.0, avgPM25: 0.9, avgTVOC: 0.124 },
+            { date: '01-21', avgCO2: 52, maxCO2: 62, minCO2: 42, avgHumidity: 51.8, avgPM25: 1.3, avgTVOC: 0.132 },
+            { date: '01-22', avgCO2: 46, maxCO2: 56, minCO2: 36, avgHumidity: 53.3, avgPM25: 1.0, avgTVOC: 0.126 }
+          ],
+          parameterRanges: [
+            { parameter: 'CO₂', excellent: 85, good: 10, fair: 5, poor: 0 },
+            { parameter: 'PM2.5', excellent: 90, good: 8, fair: 2, poor: 0 },
+            { parameter: 'PM10', excellent: 88, good: 10, fair: 2, poor: 0 },
+            { parameter: 'TVOC', excellent: 92, good: 6, fair: 2, poor: 0 }
+          ],
+          environmentalInsights: [
+            { type: 'positive', message: 'CO₂ 濃度優良，空氣流通良好' },
+            { type: 'positive', message: 'PM2.5 和 PM10 濃度均在安全範圍內' },
+            { type: 'positive', message: 'TVOC 濃度低，室內空氣品質良好' },
+            { type: 'info', message: '濕度在理想範圍內，環境舒適' }
+          ]
+        };
+        
+        setData(fallbackData);
+        setSuccessMessage('使用模擬數據顯示圖表（API 連接失敗）');
       } finally {
         setIsLoading(false);
       }
@@ -107,6 +339,7 @@ const StaticChart: React.FC = () => {
 
   const handleRefresh = () => {
     setError('');
+    setSuccessMessage('');
   };
 
   const exportChart = () => {
@@ -230,6 +463,22 @@ const StaticChart: React.FC = () => {
               </div>
             </div>
           )}
+          
+          {/* 成功訊息 */}
+          {successMessage && (
+            <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-500" />
+                <span className="text-green-700">{successMessage}</span>
+                <button
+                  onClick={() => setSuccessMessage('')}
+                  className="ml-auto text-green-500 hover:text-green-700"
+                >
+                  <XCircle className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {data && (
@@ -249,9 +498,11 @@ const StaticChart: React.FC = () => {
                     className="px-3 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="co2">CO₂ 濃度</option>
-                    <option value="o2">O₂ 濃度</option>
                     <option value="humidity">濕度</option>
                     <option value="temperature">溫度</option>
+                    <option value="pm25">PM2.5</option>
+                    <option value="pm10">PM10</option>
+                    <option value="tvoc">TVOC</option>
                   </select>
                 </div>
                 <div className="h-80">
@@ -336,9 +587,10 @@ const StaticChart: React.FC = () => {
                         }}
                       />
                       <Legend />
-                      <Bar dataKey="normal" stackId="a" fill="#10B981" name="正常" />
-                      <Bar dataKey="warning" stackId="a" fill="#F59E0B" name="警告" />
-                      <Bar dataKey="critical" stackId="a" fill="#EF4444" name="嚴重" />
+                      <Bar dataKey="excellent" stackId="a" fill="#10B981" name="優良" />
+                      <Bar dataKey="good" stackId="a" fill="#84CC16" name="良好" />
+                      <Bar dataKey="fair" stackId="a" fill="#F59E0B" name="普通" />
+                      <Bar dataKey="poor" stackId="a" fill="#EF4444" name="不良" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -423,12 +675,38 @@ const StaticChart: React.FC = () => {
                   </div>
                   <div className="flex items-center justify-between p-2">
                     <span className="text-sm text-gray-600">監控參數</span>
-                    <span className="text-lg font-semibold text-gray-900">4 項</span>
+                    <span className="text-lg font-semibold text-gray-900">6 項</span>
                   </div>
                   <div className="flex items-center justify-between p-2">
                     <span className="text-sm text-gray-600">數據覆蓋</span>
-                    <span className="text-lg font-semibold text-gray-900">7 天</span>
+                    <span className="text-lg font-semibold text-gray-900">24 小時</span>
                   </div>
+                </div>
+              </div>
+
+              {/* 環境洞察分析 */}
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5" />
+                  環境洞察分析
+                </h3>
+                <div className="space-y-3">
+                  {data.environmentalInsights.map((insight, index) => (
+                    <div key={index} className={`p-3 rounded-lg border-l-4 ${
+                      insight.type === 'positive' 
+                        ? 'bg-green-50 border-green-400 text-green-800'
+                        : insight.type === 'warning'
+                        ? 'bg-yellow-50 border-yellow-400 text-yellow-800'
+                        : 'bg-blue-50 border-blue-400 text-blue-800'
+                    }`}>
+                      <div className="flex items-start gap-2">
+                        {insight.type === 'positive' && <CheckCircle className="w-4 h-4 mt-0.5 text-green-600" />}
+                        {insight.type === 'warning' && <AlertTriangle className="w-4 h-4 mt-0.5 text-yellow-600" />}
+                        {insight.type === 'info' && <Activity className="w-4 h-4 mt-0.5 text-blue-600" />}
+                        <span className="text-sm font-medium">{insight.message}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

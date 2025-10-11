@@ -1,12 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Bell, Settings, Save, AlertTriangle, CheckCircle, XCircle, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+
+// 警報介面定義
+interface AlertItem {
+  id: number;
+  name: string;
+  parameter: string;
+  unit: string;
+  minValue: number;
+  maxValue: number;
+  enabled: boolean;
+  priority: string;
+}
+
+interface NotificationSettings {
+  email: boolean;
+  sms: boolean;
+  sound: boolean;
+  push: boolean;
+}
 
 // API 設定 - 可以根據需要修改這個 URL
 const API_BASE_URL = 'http://localhost:3001/api';
 
 const Alert = () => {
-  const [alerts, setAlerts] = useState([]);
-  const [notifications, setNotifications] = useState({
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [notifications, setNotifications] = useState<NotificationSettings>({
     email: true,
     sms: false,
     sound: true,
@@ -18,10 +37,10 @@ const Alert = () => {
   const [connectionStatus, setConnectionStatus] = useState('connected');
   const [lastSync, setLastSync] = useState(new Date());
   const [showSaveModal, setShowSaveModal] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   // API 函數
-  const apiCall = async (endpoint, options = {}) => {
+  const apiCall = async (endpoint: string, options: RequestInit = {}) => {
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         headers: {
@@ -38,7 +57,7 @@ const Alert = () => {
       
       setConnectionStatus('connected');
       return await response.json();
-    } catch (error) {
+    } catch (error: any) {
       setConnectionStatus('error');
       setError(error.message);
       throw error;
@@ -120,7 +139,7 @@ const Alert = () => {
     loadNotifications();
   }, []);
 
-  const updateAlert = async (id, field, value) => {
+  const updateAlert = async (id: number, field: string, value: any) => {
     const updatedAlerts = alerts.map(alert => 
       alert.id === id ? { ...alert, [field]: value } : alert
     );
@@ -137,14 +156,14 @@ const Alert = () => {
     }
   };
 
-  const toggleAlert = async (id) => {
+  const toggleAlert = async (id: number) => {
     const alert = alerts.find(a => a.id === id);
     if (alert) {
       await updateAlert(id, 'enabled', !alert.enabled);
     }
   };
 
-  const updateNotification = async (type) => {
+  const updateNotification = async (type: keyof NotificationSettings) => {
     const newNotifications = {
       ...notifications,
       [type]: !notifications[type]
@@ -187,7 +206,7 @@ const Alert = () => {
     loadNotifications();
   };
 
-  const getPriorityColor = (priority) => {
+  const getPriorityColor = (priority: string) => {
     switch(priority) {
       case 'high': return 'bg-red-100 text-red-800 border-red-200';
       case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
@@ -347,10 +366,10 @@ const Alert = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-4">通知方式</h3>
               <div className="space-y-3">
                 {[
-                  { key: 'email', label: 'Email通知', icon: '📧' },
-                  { key: 'sms', label: 'SMS簡訊', icon: '📱' },
-                  { key: 'sound', label: '聲音警報', icon: '🔊' },
-                  { key: 'push', label: '推播通知', icon: '🔔' }
+                  { key: 'email' as keyof NotificationSettings, label: 'Email通知', icon: '📧' },
+                  { key: 'sms' as keyof NotificationSettings, label: 'SMS簡訊', icon: '📱' },
+                  { key: 'sound' as keyof NotificationSettings, label: '聲音警報', icon: '🔊' },
+                  { key: 'push' as keyof NotificationSettings, label: '推播通知', icon: '🔔' }
                 ].map(item => (
                   <label key={item.key} className="flex items-center gap-3 cursor-pointer">
                     <input

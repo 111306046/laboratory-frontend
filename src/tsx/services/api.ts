@@ -16,6 +16,8 @@ export interface SearchDataParams {
   machine: string;
   start: string; // YYYY-MM-DD HH:MM:SS
   end: string;   // YYYY-MM-DD HH:MM:SS
+  // 可選：要求後端以指定格式回傳
+  format?: 'json' | 'excel';
 }
 
 // 原始 API 響應介面
@@ -89,6 +91,7 @@ export interface UserInfo {
   password?: string;
   func_permissions: string[];
   company: string;
+  company_lab?: string;
 }
 
 // 通用 API 調用函數
@@ -122,6 +125,13 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   // 檢查響應內容類型
   const contentType = response.headers.get('content-type');
+  if (typeof window !== 'undefined') {
+    // eslint-disable-next-line no-console
+    console.debug('[apiCall] url, content-type', {
+      url: `${API_BASE_URL}${endpoint}`,
+      contentType
+    });
+  }
   
   if (contentType && contentType.includes('application/xml')) {
     // 處理 XML 響應
@@ -247,8 +257,20 @@ export async function getRecentData(params: RecentDataParams): Promise<SensorDat
 
 // 2. 搜索數據
 export async function searchData(params: SearchDataParams): Promise<SensorData[] | ExcelResponse> {
-  // 後端希望空格為實際空格而非 %20，因此僅編碼非時間欄位
-  const query = `company_lab=${encodeURIComponent(params.company_lab)}&machine=${encodeURIComponent(params.machine)}&start=${params.start}&end=${params.end}`;
+  // 將所有查詢參數做 URL 安全編碼，避免空白與特殊字元造成解析問題
+  const queryParts = [
+    `company_lab=${encodeURIComponent(params.company_lab)}`,
+    `machine=${encodeURIComponent(params.machine)}`,
+    `start=${encodeURIComponent(params.start)}`,
+    `end=${encodeURIComponent(params.end)}`
+  ];
+  if (params.format) {
+    queryParts.push(`format=${encodeURIComponent(params.format)}`);
+  } else {
+    // 預設期望 JSON
+    queryParts.push('format=json');
+  }
+  const query = queryParts.join('&');
   // 調試輸出：觀察實際查詢參數（可於生產環境移除）
   if (typeof window !== 'undefined') {
     // eslint-disable-next-line no-console
@@ -257,7 +279,8 @@ export async function searchData(params: SearchDataParams): Promise<SensorData[]
       machine: params.machine,
       start: params.start,
       end: params.end,
-      url: `/searchData?${query}`
+      format: params.format ?? 'json',
+      url: `${API_BASE_URL}/searchData?${query}`
     });
   }
   
@@ -278,6 +301,52 @@ export interface ExcelResponse {
   type: 'excel';
   blob: Blob;
   filename: string;
+}
+
+// 解析 Excel Blob 為 SensorData 陣列（需要 xlsx 套件）
+export async function parseExcelToSensorData(excel: ExcelResponse): Promise<SensorData[]> {
+  try {
+    // 一律使用 CDN 版本，避免本地模組解析問題
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore 使用 ESM CDN 並告知 Vite 忽略預打包
+    const XLSX: any = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
+    const arrayBuffer = await excel.blob.arrayBuffer();
+    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const rows: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: null });
+
+    return rows.map((row) => {
+      const toNum = (v: any): number => {
+        const n = typeof v === 'string' ? parseFloat(v) : (v ?? 0);
+        return Number.isFinite(n) ? Number(n) : 0;
+      };
+
+      // 兼容不同欄位命名
+      const temperature = row.temperatu ?? row.temperature ?? row.temp ?? 0;
+      const pm25Ave = row.pm25_ave ?? row.pm25_average ?? row.pm25Avg ?? 0;
+      const pm10Ave = row.pm10_ave ?? row.pm10_average ?? row.pm10Avg ?? 0;
+
+      const data: SensorData = {
+        timestamp: String(row.timestamp ?? row.time ?? ''),
+        machine: String(row.machine ?? ''),
+        temperatu: toNum(temperature),
+        humidity: toNum(row.humidity),
+        pm25: toNum(row.pm25),
+        pm10: toNum(row.pm10),
+        pm25_ave: toNum(pm25Ave),
+        pm10_ave: toNum(pm10Ave),
+        co2: toNum(row.co2),
+        tvoc: toNum(row.tvoc),
+        temperature: toNum(temperature),
+        status: 'normal'
+      };
+      return data;
+    });
+  } catch (err) {
+    console.error('Excel-to-JSON 解析失敗:', err);
+    throw new Error('Excel 檔案解析失敗，請改為下載 Excel');
+  }
 }
 
 // 下載 Excel 文件

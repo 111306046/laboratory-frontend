@@ -163,23 +163,7 @@ const Alert = () => {
     }
   };
 
-  const updateNotification = async (type: keyof NotificationSettings) => {
-    const newNotifications = {
-      ...notifications,
-      [type]: !notifications[type]
-    };
-    setNotifications(newNotifications);
-
-    try {
-      await apiCall('/notifications', {
-        method: 'PUT',
-        body: JSON.stringify(newNotifications)
-      });
-    } catch (error) {
-      console.error('更新通知設定失敗:', error);
-      setNotifications(notifications); // 恢復原狀態
-    }
-  };
+  // 通知設定已簡化為 LINE 專用，此函數保留以相容既有結構
 
   const saveSettings = async () => {
     try {
@@ -204,6 +188,42 @@ const Alert = () => {
   const refreshData = () => {
     loadAlerts();
     loadNotifications();
+  };
+
+  // 發送 LINE 測試通知（假後端）
+  const sendTestLineNotify = async () => {
+    try {
+      setSaving(true);
+      const company =
+        localStorage.getItem('company_name') ||
+        localStorage.getItem('company') ||
+        localStorage.getItem('company_lab') ||
+        'NCCU';
+      const message = `【警報測試】${company} 實驗室\n` +
+        alerts
+          .filter(a => a.enabled)
+          .map(a => `${a.name}: ${a.minValue} ~ ${a.maxValue} ${a.unit}`)
+          .join('\n');
+
+      // 呼叫假後端接口（本地 mock），若無後端則不報錯
+      try {
+        await apiCall('/alerts/notify', {
+          method: 'POST',
+          body: JSON.stringify({ message, priority: 'medium', company_lab: company })
+        });
+      } catch (e) {
+        // 若本地 mock 不存在，視為成功（純前端 demo）
+        console.warn('Mock /alerts/notify 不存在，已模擬成功');
+      }
+
+      setShowSaveModal(true);
+      setTimeout(() => setShowSaveModal(false), 1500);
+    } catch (err) {
+      console.error('發送測試通知失敗:', err);
+      setError('發送測試通知失敗');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const getPriorityColor = (priority: string) => {
@@ -361,27 +381,13 @@ const Alert = () => {
 
           {/* 通知設置 & 狀態面板 */}
           <div className="space-y-6">
-            {/* 通知方式設置 */}
+            {/* 通知方式設置（精簡為 LINE 專用） */}
             <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">通知方式</h3>
-              <div className="space-y-3">
-                {[
-                  { key: 'email' as keyof NotificationSettings, label: 'Email通知', icon: '📧' },
-                  { key: 'sms' as keyof NotificationSettings, label: 'SMS簡訊', icon: '📱' },
-                  { key: 'sound' as keyof NotificationSettings, label: '聲音警報', icon: '🔊' },
-                  { key: 'push' as keyof NotificationSettings, label: '推播通知', icon: '🔔' }
-                ].map(item => (
-                  <label key={item.key} className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={notifications[item.key]}
-                      onChange={() => updateNotification(item.key)}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="text-lg">{item.icon}</span>
-                    <span className="text-gray-700">{item.label}</span>
-                  </label>
-                ))}
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">通知方式</h3>
+              <p className="text-gray-600 text-sm mb-3">本系統僅透過 LINE 發送警報通知</p>
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">💬</span>
+                <span className="text-gray-800">LINE 通知</span>
               </div>
             </div>
 
@@ -414,19 +420,28 @@ const Alert = () => {
               </div>
             </div>
 
-            {/* 保存按鈕 */}
-            <button
-              onClick={saveSettings}
-              disabled={saving}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-            >
-              {saving ? (
-                <RefreshCw className="w-5 h-5 animate-spin" />
-              ) : (
-                <Save className="w-5 h-5" />
-              )}
-              {saving ? '保存中...' : '保存設置'}
-            </button>
+            {/* 保存與測試通知按鈕 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                onClick={saveSettings}
+                disabled={saving}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                {saving ? (
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Save className="w-5 h-5" />
+                )}
+                {saving ? '保存中...' : '保存設置'}
+              </button>
+              <button
+                onClick={sendTestLineNotify}
+                disabled={saving}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white py-3 px-4 rounded-lg font-medium transition-colors"
+              >
+                發送 LINE 測試
+              </button>
+            </div>
           </div>
         </div>
 

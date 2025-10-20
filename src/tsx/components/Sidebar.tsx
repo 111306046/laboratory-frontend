@@ -136,7 +136,18 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         </button>
 
         {sidebarOpen ? (
-          <h2 className="text-xl font-bold">NCCU 實驗室</h2>
+          (() => {
+            // 以 company_lab 為主，其次 company/company_name
+            const fromLab = localStorage.getItem('company_lab');
+            const fallback = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
+            let raw = (fromLab || fallback || '').toString().trim();
+            // 轉為更友善的顯示：移除 _lab 後綴，底線轉空白
+            raw = raw.replace(/_lab$/i, '').replace(/_/g, ' ');
+            // 特例：nccu → NCCU
+            if (/^nccu$/i.test(raw)) raw = 'NCCU';
+            const brand = raw.includes('實驗室') ? raw : `${raw} 實驗室`;
+            return <h2 className="text-xl font-bold">{brand}</h2>;
+          })()
         ) : (
           <h2 className="text-xl font-bold"></h2>
         )}

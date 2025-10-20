@@ -48,7 +48,7 @@ const Home: React.FC = () => {
         
         // 獲取最近的數據
         const recentData = await getRecentData({
-          company_lab: 'nccu_lab',
+          company_lab: localStorage.getItem('company_lab') || 'nccu_lab',
           machine: 'aq',
           number: 1
         });

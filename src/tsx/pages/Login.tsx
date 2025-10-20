@@ -31,6 +31,10 @@ const Login: React.FC = () => {
       const data = await login(account, password);
       localStorage.setItem('token', data.access_token);
       localStorage.setItem('user_account', account);
+      // 清理殘留的公司資訊，避免跨帳號污染
+      localStorage.removeItem('company_lab');
+      localStorage.removeItem('company');
+      localStorage.removeItem('company_name');
       
       // 登入成功後，獲取用戶權限資訊
       try {
@@ -38,6 +42,20 @@ const Login: React.FC = () => {
         // 找到當前用戶的權限
         const currentUser = usersData.find((user: any) => user.account === account);
         
+        if (currentUser) {
+          // 寫入公司/實驗室供側邊欄品牌使用
+          if (currentUser.company_lab) {
+            localStorage.setItem('company_lab', currentUser.company_lab);
+          }
+          if (currentUser.company) {
+            localStorage.setItem('company', currentUser.company);
+            localStorage.setItem('company_name', currentUser.company);
+          }
+        } else if (account === 'yezyez') {
+          // 超級使用者預設品牌
+          localStorage.setItem('company_lab', 'nccu_lab');
+        }
+
         if (currentUser && currentUser.func_permissions) {
           localStorage.setItem('user_permissions', JSON.stringify(currentUser.func_permissions));
         } else if (account === 'yezyez') {

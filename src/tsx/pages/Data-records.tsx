@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Calendar, Download, RefreshCw, Database, AlertTriangle, CheckCircle, XCircle, Wifi, WifiOff } from 'lucide-react';
-import { getRecentData, searchData, SensorData, ExcelResponse, downloadExcelFile } from '../services/api';
+import { getRecentData, searchData, SensorData, ExcelResponse, downloadExcelFile, parseExcelToSensorData } from '../services/api';
 
 // 使用從 API 服務導入的 SensorData 介面
 type DataRecord = SensorData & { id: string };
@@ -20,9 +20,13 @@ const DataRecords: React.FC = () => {
   const [endDate, setEndDate] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState<string>('last7days'); // 新增：日期範圍選擇，預設為最近7天
+  // 新增：回傳格式切換（預設 json，另有 excel）
+  const [returnFormat, setReturnFormat] = useState<'json' | 'excel'>('json');
   
-  // 新增：實驗室和機器選擇
-  const [selectedCompanyLab] = useState<string>('nccu_lab');
+  // 新增：實驗室和機器選擇（從 localStorage 帶入，預設 nccu_lab）
+  const [selectedCompanyLab] = useState<string>(
+    localStorage.getItem('company_lab') || 'nccu_lab'
+  );
   const [selectedMachine] = useState<string>('aq');
   const [dataCount] = useState<number>(100);
   
@@ -56,17 +60,23 @@ const DataRecords: React.FC = () => {
             company_lab: selectedCompanyLab,
             machine: selectedMachine,
             start: startWithTime,
-            end: endWithTime
+            end: endWithTime,
+            format: returnFormat
           });
           
           // 檢查是否為 Excel 響應
           if (searchResult && typeof searchResult === 'object' && 'type' in searchResult && searchResult.type === 'excel') {
-            // 下載 Excel 文件
-            downloadExcelFile(searchResult as ExcelResponse);
-            setError(''); // 清除錯誤
-            setSuccessMessage(`Excel 文件已下載: ${(searchResult as ExcelResponse).filename}`);
-            setRecords([]); // 清空記錄，因為數據在 Excel 文件中
-            return;
+            if (returnFormat === 'excel') {
+              // 預期下載情境
+              downloadExcelFile(searchResult as ExcelResponse);
+              setError('');
+              setSuccessMessage(`Excel 文件已下載: ${(searchResult as ExcelResponse).filename}`);
+              setRecords([]); // 維持現有行為：下載模式不在表格顯示
+              return;
+            }
+            // 使用者選的是 JSON，但伺服器回傳 Excel：改為前端解析後顯示
+            const parsed = await parseExcelToSensorData(searchResult as ExcelResponse);
+            data = parsed as SensorData[];
           } else {
             // 正常的數據數組
             data = searchResult as SensorData[];
@@ -80,12 +90,43 @@ const DataRecords: React.FC = () => {
           });
         }
         
+        // 依時間由新到舊排序
+        const toMs = (ts: string): number => {
+          const d = new Date(ts);
+          if (!isNaN(d.getTime())) return d.getTime();
+          const alt = ts.replace(/-/g, '/');
+          const d2 = new Date(alt);
+          return isNaN(d2.getTime()) ? 0 : d2.getTime();
+        };
+        data.sort((a, b) => toMs(b.timestamp) - toMs(a.timestamp));
+
         // 轉換數據格式並添加 ID
-        const formattedData: DataRecord[] = data.map((item, index) => ({
+        let formattedData: DataRecord[] = data.map((item, index) => ({
           ...item,
           id: `record_${index + 1}`,
           timestamp: item.timestamp
         }));
+
+        // 再次保險排序：確保跨月時 10 月在 9 月前
+        const parseToMs = (ts: string): number => {
+          // 標準 YYYY-MM-DD HH:mm:ss
+          const isoLike = ts.replace(' ', 'T');
+          const d1 = new Date(isoLike);
+          if (!isNaN(d1.getTime())) return d1.getTime();
+          // 退化處理：將 - 換成 /
+          const d2 = new Date(ts.replace(/-/g, '/'));
+          if (!isNaN(d2.getTime())) return d2.getTime();
+          // 最後手段：只取日期部分
+          const m = ts.match(/(\d{4})[-\/]?(\d{1,2})[-\/]?(\d{1,2})/);
+          if (m) {
+            const y = Number(m[1]);
+            const mo = Number(m[2]);
+            const da = Number(m[3]);
+            return new Date(y, mo - 1, da).getTime();
+          }
+          return 0;
+        };
+        formattedData.sort((a, b) => parseToMs(b.timestamp) - parseToMs(a.timestamp));
         
         setRecords(formattedData);
         setConnectionStatus('connected');
@@ -436,6 +477,17 @@ const DataRecords: React.FC = () => {
                   >
                     顯示最近數據
                   </button>
+                </div>
+                {/* 回傳格式切換 */}
+                <div>
+                  <select
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    value={returnFormat}
+                    onChange={(e) => setReturnFormat(e.target.value as 'json' | 'excel')}
+                  >
+                    <option value="json">以 JSON 顯示</option>
+                    <option value="excel">下載 Excel</option>
+                  </select>
                 </div>
               </div>
             </div>

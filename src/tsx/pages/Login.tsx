@@ -36,52 +36,38 @@ const Login: React.FC = () => {
       localStorage.removeItem('company');
       localStorage.removeItem('company_name');
       
-      // 登入成功後，獲取用戶權限資訊
-      try {
-        const usersData = await getUsers();
-        // 找到當前用戶的權限
-        const currentUser = usersData.find((user: any) => user.account === account);
-        
-        if (currentUser) {
-          // 寫入公司/實驗室供側邊欄品牌使用
-          if (currentUser.company_lab) {
-            localStorage.setItem('company_lab', currentUser.company_lab);
-          }
-          if (currentUser.company) {
-            localStorage.setItem('company', currentUser.company);
-            localStorage.setItem('company_name', currentUser.company);
-          }
-        } else if (account === 'yezyez') {
-          // 超級使用者預設品牌
-          localStorage.setItem('company_lab', 'nccu_lab');
-        }
+      // 優先使用後端登入回傳的權限與公司（若提供）
+      if (data.func_permissions && Array.isArray(data.func_permissions)) {
+        localStorage.setItem('user_permissions', JSON.stringify(data.func_permissions));
+      }
+      if (data.company) {
+        localStorage.setItem('company', data.company);
+        localStorage.setItem('company_name', data.company);
+      }
 
-        if (currentUser && currentUser.func_permissions) {
-          localStorage.setItem('user_permissions', JSON.stringify(currentUser.func_permissions));
-        } else if (account === 'yezyez') {
-          // yezyez 超級使用者預設權限
-          const permissions = [
-            'view_data', 'create_user', 'modify_user', 'get_users',
-            'modify_lab', 'get_labs', 'view_alerts', 'view_statistics',
-            'control_machine', 'change_password'
-          ];
-          localStorage.setItem('user_permissions', JSON.stringify(permissions));
-        } else {
-          // 其他用戶預設基本權限
-          localStorage.setItem('user_permissions', JSON.stringify(['view_data', 'change_password']));
+      // 若登入回傳沒有包含權限，再從 getUsers 尋找
+      if (!localStorage.getItem('user_permissions')) {
+        try {
+          const usersData = await getUsers();
+          const currentUser = usersData.find((user: any) => user.account === account);
+          if (currentUser?.func_permissions) {
+            localStorage.setItem('user_permissions', JSON.stringify(currentUser.func_permissions));
+            if (currentUser.company) {
+              localStorage.setItem('company', currentUser.company);
+              localStorage.setItem('company_name', currentUser.company);
+            }
+            if (currentUser.company_lab) {
+              localStorage.setItem('company_lab', currentUser.company_lab);
+            }
+          }
+        } catch (permissionError) {
+          console.error('獲取用戶權限失敗:', permissionError);
         }
-      } catch (permissionError) {
-        console.error('獲取用戶權限失敗:', permissionError);
-        // 如果獲取權限失敗，設定預設權限
-        if (account === 'yezyez') {
-          localStorage.setItem('user_permissions', JSON.stringify([
-            'view_data', 'create_user', 'modify_user', 'get_users',
-            'modify_lab', 'get_labs', 'view_alerts', 'view_statistics',
-            'control_machine', 'change_password'
-          ]));
-        } else {
-          localStorage.setItem('user_permissions', JSON.stringify(['view_data', 'change_password']));
-        }
+      }
+
+      // 若仍沒有權限，給最小集（避免界面空白）
+      if (!localStorage.getItem('user_permissions')) {
+        localStorage.setItem('user_permissions', JSON.stringify(['view_data', 'change_password']));
       }
       
       navigate('/dashboard');

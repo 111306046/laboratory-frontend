@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Bell, Settings, Save, AlertTriangle, CheckCircle, XCircle, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { generateBindingCode, getThresholds, getThresholdBySensor, setThresholds, ThresholdItem } from '../services/api';
 
 // 警報介面定義
 interface AlertItem {
@@ -20,8 +21,8 @@ interface NotificationSettings {
   push: boolean;
 }
 
-// API 設定 - 可以根據需要修改這個 URL
-const API_BASE_URL = 'http://localhost:3001/api';
+// 停用本地 mock 通知 API，避免連線錯誤影響頁面
+const API_BASE_URL = '';
 
 const Alert = () => {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
@@ -38,23 +39,31 @@ const Alert = () => {
   const [lastSync, setLastSync] = useState(new Date());
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bindingCode, setBindingCode] = useState<string | null>(null);
+  const [bindingExpiresAt, setBindingExpiresAt] = useState<number | null>(null);
+  const [bindingCountdown, setBindingCountdown] = useState<number>(0);
+  const [bindingLoading, setBindingLoading] = useState<boolean>(false);
 
   // API 函數
   const apiCall = async (endpoint: string, options: RequestInit = {}) => {
+    // 本頁的通知相關 API 僅作為示意，若未啟動本地 mock，直接回傳預設值，避免報錯
+    if (!API_BASE_URL) {
+      if (endpoint === '/notifications') {
+        return Promise.resolve(notifications);
+      }
+      return Promise.resolve({});
+    }
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         headers: {
           'Content-Type': 'application/json',
-          // 'Authorization': `Bearer ${localStorage.getItem('authToken')}`, // 如果需要驗證可以取消註解
           ...options.headers
         },
         ...options
       });
-      
       if (!response.ok) {
         throw new Error(`API Error: ${response.status}`);
       }
-      
       setConnectionStatus('connected');
       return await response.json();
     } catch (error: any) {
@@ -68,55 +77,51 @@ const Alert = () => {
   const loadAlerts = async () => {
     try {
       setLoading(true);
-      const data = await apiCall('/alerts');
-      setAlerts(data.alerts || []);
-      setNotifications(data.notifications || notifications);
-      setLastSync(new Date());
       setError(null);
-    } catch (error) {
-      console.error('載入警報設定失敗:', error);
-      // 使用預設值
-      setAlerts([
-        {
-          id: 1,
-          name: '溫度監控',
-          parameter: 'temperature',
-          unit: '°C',
-          minValue: 18,
-          maxValue: 25,
-          enabled: true,
-          priority: 'high'
-        },
-        {
-          id: 2,
-          name: '濕度監控',
-          parameter: 'humidity',
-          unit: '%',
-          minValue: 40,
-          maxValue: 60,
-          enabled: true,
-          priority: 'medium'
-        },
-        {
-          id: 3,
-          name: '壓力監控',
-          parameter: 'pressure',
-          unit: 'hPa',
-          minValue: 1000,
-          maxValue: 1020,
-          enabled: false,
-          priority: 'low'
-        },
-        {
-          id: 4,
-          name: 'CO2濃度',
-          parameter: 'co2',
-          unit: 'ppm',
-          minValue: 0,
-          maxValue: 1000,
-          enabled: true,
-          priority: 'high'
+      const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
+      const lab = localStorage.getItem('company_lab') || 'nccu_lab';
+      // 後端對 getThresholds 可能要求 sensor，這裡以常見感測器清單並行請求
+      const sensors = ['temperature', 'humidity', 'co2', 'pm25', 'pm10'];
+      const fetched = await Promise.all(
+        sensors.map(async (s) => {
+          const one = await getThresholdBySensor({ company, lab, sensor: s });
+          return one ?? { company, lab, sensor: s, min: null, max: null, enabled: true } as ThresholdItem;
+        })
+      );
+
+      const unitOf = (sensor: string): string => {
+        switch (sensor) {
+          case 'temperature': return '°C';
+          case 'humidity': return '%';
+          case 'co2': return 'ppm';
+          case 'pm25': return 'µg/m³';
+          case 'pm10': return 'µg/m³';
+          default: return '';
         }
+      };
+
+      const items = fetched;
+      const mapped: AlertItem[] = items.map((it, idx) => ({
+        id: idx + 1,
+        name: `${it.sensor} 監控`,
+        parameter: it.sensor,
+        unit: unitOf(it.sensor),
+        minValue: typeof (it.threshold?.min ?? it.min) === 'number' ? (it.threshold?.min ?? it.min)! : 0,
+        maxValue: typeof (it.threshold?.max ?? it.max) === 'number' ? (it.threshold?.max ?? it.max)! : 0,
+        enabled: (it.threshold?.enabled ?? it.enabled) ?? true,
+        priority: 'medium'
+      }));
+
+      setAlerts(mapped);
+      setLastSync(new Date());
+    } catch (error: any) {
+      console.error('載入警報設定失敗:', error);
+      setError(error?.message || '載入警報設定失敗');
+      // 顯示回退的預設警報，避免整塊區域為空
+      setAlerts([
+        { id: 1, name: '溫度監控', parameter: 'temperature', unit: '°C', minValue: 18, maxValue: 25, enabled: true, priority: 'high' },
+        { id: 2, name: '濕度監控', parameter: 'humidity', unit: '%', minValue: 40, maxValue: 60, enabled: true, priority: 'medium' },
+        { id: 3, name: 'CO2濃度', parameter: 'co2', unit: 'ppm', minValue: 0, maxValue: 1000, enabled: true, priority: 'high' }
       ]);
     } finally {
       setLoading(false);
@@ -139,6 +144,19 @@ const Alert = () => {
     loadNotifications();
   }, []);
 
+  // 倒數計時效果
+  useEffect(() => {
+    if (!bindingExpiresAt) return;
+    const tick = () => {
+      const now = Math.floor(Date.now() / 1000);
+      const remain = Math.max(bindingExpiresAt - now, 0);
+      setBindingCountdown(remain);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [bindingExpiresAt]);
+
   const updateAlert = async (id: number, field: string, value: any) => {
     const updatedAlerts = alerts.map(alert => 
       alert.id === id ? { ...alert, [field]: value } : alert
@@ -146,13 +164,15 @@ const Alert = () => {
     setAlerts(updatedAlerts);
 
     try {
-      await apiCall(`/alerts/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ [field]: value })
-      });
+      const updated = updatedAlerts.find(a => a.id === id);
+      if (!updated) return;
+      const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
+      const lab = localStorage.getItem('company_lab') || 'nccu_lab';
+      await setThresholds({ company, lab, sensor: updated.parameter, min: updated.minValue, max: updated.maxValue, enabled: updated.enabled });
     } catch (error) {
       console.error('更新警報失敗:', error);
-      loadAlerts(); // 重新載入以恢復狀態
+      // 失敗時回退
+      loadAlerts();
     }
   };
 
@@ -188,6 +208,25 @@ const Alert = () => {
   const refreshData = () => {
     loadAlerts();
     loadNotifications();
+  };
+
+  // 產生 LINE 綁定碼
+  const handleGenerateBindingCode = async () => {
+    try {
+      setBindingLoading(true);
+      setError(null);
+      const res = await generateBindingCode();
+      if (res.binding_code) {
+        setBindingCode(res.binding_code);
+        // 有些後端會在插入時設定 5 分鐘，這裡用前端 5 分鐘倒數作為視覺提示
+        const expireTs = Math.floor(Date.now() / 1000) + 300;
+        setBindingExpiresAt(expireTs);
+      }
+    } catch (e: any) {
+      setError(e?.message || '產生綁定碼失敗');
+    } finally {
+      setBindingLoading(false);
+    }
   };
 
   // 發送 LINE 測試通知（假後端）
@@ -313,7 +352,7 @@ const Alert = () => {
               
               <div className="space-y-4">
                 {alerts.map(alert => (
-                  <div key={alert.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div key={alert.id} className={`border rounded-lg p-4 hover:shadow-md transition-shadow ${alert.enabled ? '' : 'opacity-60'}`}>
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
                         <button
@@ -328,10 +367,16 @@ const Alert = () => {
                         </button>
                         <div>
                           <h3 className="font-medium text-gray-900">{alert.name}</h3>
-                          <span className={`inline-block px-2 py-1 text-xs rounded-full border ${getPriorityColor(alert.priority)}`}>
-                            {alert.priority === 'high' ? '高優先級' : 
-                             alert.priority === 'medium' ? '中優先級' : '低優先級'}
-                          </span>
+                          {alert.enabled ? (
+                            <span className={`inline-block px-2 py-1 text-xs rounded-full border ${getPriorityColor(alert.priority)}`}>
+                              {alert.priority === 'high' ? '高優先級' : 
+                               alert.priority === 'medium' ? '中優先級' : '低優先級'}
+                            </span>
+                          ) : (
+                            <span className="inline-block px-2 py-1 text-xs rounded-full border bg-gray-100 text-gray-600 border-gray-200">
+                              已停用
+                            </span>
+                          )}
                         </div>
                       </div>
                       
@@ -381,6 +426,30 @@ const Alert = () => {
 
           {/* 通知設置 & 狀態面板 */}
           <div className="space-y-6">
+            {/* LINE 綁定區塊 */}
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">LINE 綁定</h3>
+              <p className="text-gray-600 text-sm mb-4">點擊產生綁定碼，5 分鐘內至 LINE 輸入以完成綁定。</p>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleGenerateBindingCode}
+                  disabled={bindingLoading}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded"
+                >
+                  {bindingLoading ? '產生中...' : '產生綁定碼'}
+                </button>
+                {bindingCode && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-gray-700">綁定碼：</span>
+                    <span className="text-lg font-mono font-semibold tracking-wider">{bindingCode}</span>
+                    <span className="text-sm text-gray-500">倒數 {Math.floor(bindingCountdown / 60)}:{String(bindingCountdown % 60).padStart(2, '0')}</span>
+                  </div>
+                )}
+              </div>
+              {bindingCode && bindingCountdown === 0 && (
+                <div className="mt-2 text-sm text-red-600">綁定碼已過期，請重新產生。</div>
+              )}
+            </div>
             {/* 通知方式設置（精簡為 LINE 專用） */}
             <div className="bg-white rounded-lg shadow-lg p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-1">通知方式</h3>

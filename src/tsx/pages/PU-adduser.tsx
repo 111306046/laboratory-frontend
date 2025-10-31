@@ -608,17 +608,13 @@ const AdminManagement = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     公司
                   </label>
-                  <select
+                  <input
+                    type="text"
+                    placeholder="請輸入公司名稱"
                     className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={newUser.company}
                     onChange={(e) => setNewUser({...newUser, company: e.target.value})}
-                  >
-                    <option value="">請選擇公司</option>
-                    {/* 假設後端返回公司列表 */}
-                    <option value="公司A">公司A</option>
-                    <option value="公司B">公司B</option>
-                    <option value="公司C">公司C</option>
-                  </select>
+                  />
                 </div>
                 
                 <div>
@@ -719,17 +715,13 @@ const AdminManagement = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               公司
             </label>
-            <select
+            <input
+              type="text"
+              placeholder="請輸入公司名稱"
               className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={editingUser.company}
               onChange={(e) => setEditingUser({...editingUser, company: e.target.value})}
-            >
-              <option value="">請選擇公司</option>
-              {/* 假設後端返回公司列表 */}
-              <option value="公司A">公司A</option>
-              <option value="公司B">公司B</option>
-              <option value="公司C">公司C</option>
-            </select>
+            />
           </div>
           
           <div>

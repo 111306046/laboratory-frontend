@@ -1,7 +1,7 @@
 // API 服務文件 - 處理所有後端 API 調用
 
-// API 基礎配置
-const API_BASE_URL = 'http://13.211.240.55/api';
+// API 基礎配置：使用相對路徑以配合 Vite 代理，避免 CORS
+const API_BASE_URL = '/api';
 const WS_BASE_URL = 'ws://13.211.240.55/ws';
 
 // 數據介面定義
@@ -362,8 +362,14 @@ export function downloadExcelFile(excelResponse: ExcelResponse): void {
 }
 
 // 3. 登入
-export async function login(account: string, password: string): Promise<{ access_token: string }> {
-  return apiCall<{ access_token: string }>('/login', {
+export interface LoginResponse {
+  access_token: string;
+  func_permissions?: string[];
+  company?: string;
+}
+
+export async function login(account: string, password: string): Promise<LoginResponse> {
+  return apiCall<LoginResponse>('/login', {
     method: 'POST',
     body: JSON.stringify({ account, password })
   });
@@ -545,4 +551,127 @@ export function parseDateTime(dateTimeStr: string): Date {
   const [hours, minutes, seconds] = timePart.split(':').map(Number);
   
   return new Date(year, month - 1, day, hours, minutes, seconds);
+}
+
+// 10. 產生 LINE 綁定碼
+export interface GenerateBindingCodeResponse {
+  status?: string;
+  binding_code?: string;
+  message: string;
+}
+
+export async function generateBindingCode(): Promise<GenerateBindingCodeResponse> {
+  return apiCall<GenerateBindingCodeResponse>('/generate_binding_code', {
+    method: 'POST'
+  });
+}
+
+// 11. 刪除門檻（thresholds）
+export interface DeleteThresholdsRequest {
+  company: string;
+  lab: string;
+  sensor: string;
+}
+
+export interface DeleteThresholdsResponse {
+  message: string;
+}
+
+export async function deleteThresholds(payload: DeleteThresholdsRequest): Promise<DeleteThresholdsResponse> {
+  return apiCall<DeleteThresholdsResponse>('/deleteThresholds', {
+    method: 'DELETE',
+    body: JSON.stringify(payload)
+  });
+}
+
+// 12. 取得/設定門檻值
+export interface ThresholdItem {
+  company: string;
+  lab: string;
+  sensor: string; // e.g., 'temperature', 'humidity', 'co2', etc.
+  min?: number | null;
+  max?: number | null;
+  enabled?: boolean;
+  // 後端可能以 threshold 子文件儲存上下限與啟用狀態
+  threshold?: {
+    min?: number | null;
+    max?: number | null;
+    enabled?: boolean;
+  };
+}
+
+export interface GetThresholdsParams {
+  company: string;
+  lab: string;
+}
+
+export async function getThresholds(params: GetThresholdsParams): Promise<ThresholdItem[]> {
+  // 嘗試 POST JSON（某些後端 schema 以 body 驗證），失敗再回退 GET 查詢
+  try {
+    return await apiCall<ThresholdItem[]>(`/getThresholds`, {
+      method: 'POST',
+      body: JSON.stringify(params)
+    });
+  } catch (e) {
+    const query = new URLSearchParams({ company: params.company, lab: params.lab }).toString();
+    return apiCall<ThresholdItem[]>(`/getThresholds?${query}`);
+  }
+}
+
+// 取得單一感測器的門檻值（部分後端要求必帶 sensor）
+export interface GetThresholdBySensorParams {
+  company: string;
+  lab: string;
+  sensor: string;
+}
+
+export async function getThresholdBySensor(params: GetThresholdBySensorParams): Promise<ThresholdItem | null> {
+  // 以 GET + query 為唯一方式，避免後端 405
+  const query = new URLSearchParams({ company: params.company, lab: params.lab, sensor: params.sensor }).toString();
+  const result = await apiCall<ThresholdItem | ThresholdItem[] | null>(`/getThresholds?${query}`);
+  if (Array.isArray(result)) return result[0] ?? null;
+  return result as ThresholdItem | null;
+}
+
+// 前端更新格式轉換：後端期望 body 內含與 sensor 同名的物件
+export type ThresholdUpdate = {
+  company: string;
+  lab: string;
+  sensor: string;
+  min?: number | null;
+  max?: number | null;
+  enabled?: boolean;
+};
+
+export async function setThresholds(item: ThresholdUpdate): Promise<{ message: string }> {
+  const { company, lab, sensor, min, max, enabled } = item;
+  const payload: Record<string, unknown> = { company, lab, sensor };
+  // 後端的 Pydantic model 可能要求所有欄位都存在，未更新者給 null
+  const allSensors = ['temperature','humidity','pm25','pm10','pm25_average','pm10_average','co2','tvoc'];
+  allSensors.forEach((key) => {
+    payload[key] = null;
+  });
+  // 目標感測器使用物件，其他保持為 null（後端會過濾 None）
+  payload[sensor] = {
+    ...(typeof min === 'number' ? { min } : {}),
+    ...(typeof max === 'number' ? { max } : {}),
+    ...(typeof enabled === 'boolean' ? { enabled } : {})
+  };
+  return apiCall<{ message: string }>(`/setThresholds`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+// 13. 管理公司（新增/修改 extra_auth）
+export interface ManageCompanyRequest {
+  company: string;
+  extra_auth: boolean;
+}
+
+export async function manageCompany(payload: ManageCompanyRequest): Promise<{ message: string }> {
+  return apiCall<{ message: string }>(`/manageCompany`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
 }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login, getUsers } from '../services/api';
+import { login } from '../services/api';
 
 // 使用新的 API 服務，移除舊的 api 函數
 
@@ -37,37 +37,61 @@ const Login: React.FC = () => {
       localStorage.removeItem('company_name');
       
       // 優先使用後端登入回傳的權限與公司（若提供）
-      if (data.func_permissions && Array.isArray(data.func_permissions)) {
-        localStorage.setItem('user_permissions', JSON.stringify(data.func_permissions));
-      }
-      if (data.company) {
-        localStorage.setItem('company', data.company);
-        localStorage.setItem('company_name', data.company);
-      }
-
-      // 若登入回傳沒有包含權限，再從 getUsers 尋找
-      if (!localStorage.getItem('user_permissions')) {
-        try {
-          const usersData = await getUsers();
-          const currentUser = usersData.find((user: any) => user.account === account);
-          if (currentUser?.func_permissions) {
-            localStorage.setItem('user_permissions', JSON.stringify(currentUser.func_permissions));
-            if (currentUser.company) {
-              localStorage.setItem('company', currentUser.company);
-              localStorage.setItem('company_name', currentUser.company);
-            }
-            if (currentUser.company_lab) {
-              localStorage.setItem('company_lab', currentUser.company_lab);
-            }
-          }
-        } catch (permissionError) {
-          console.error('獲取用戶權限失敗:', permissionError);
+      if (account === 'yezyez') {
+        const superPerms = [
+          'view_data', 'create_user', 'modify_user', 'get_users',
+          'modify_lab', 'get_labs', 'view_alerts', 'view_statistics',
+          'control_machine', 'change_password'
+        ];
+        localStorage.setItem('user_permissions', JSON.stringify(superPerms));
+        localStorage.setItem('is_superuser', 'true');
+        if (!localStorage.getItem('company_lab')) {
+          localStorage.setItem('company_lab', 'nccu_lab');
+        }
+      } else if ((data as any).permissions && Array.isArray((data as any).permissions)) {
+        // 後端若以 permissions 回傳
+        const perms = (data as any).permissions as string[];
+        localStorage.setItem('user_permissions', JSON.stringify(perms));
+        localStorage.setItem('is_superuser', perms.includes('superuser') ? 'true' : 'false');
+      } else if (data.func_permissions && Array.isArray(data.func_permissions)) {
+        // 若為超級使用者，給完整權限集合
+        if (data.func_permissions.includes('superuser')) {
+          const superPerms = [
+            'view_data', 'create_user', 'modify_user', 'get_users',
+            'modify_lab', 'get_labs', 'view_alerts', 'view_statistics',
+            'control_machine', 'change_password'
+          ];
+          localStorage.setItem('user_permissions', JSON.stringify(superPerms));
+          localStorage.setItem('is_superuser', 'true');
+        } else {
+          localStorage.setItem('user_permissions', JSON.stringify(data.func_permissions));
+          localStorage.setItem('is_superuser', 'false');
         }
       }
+      if ((data as any).company) {
+        const comp = (data as any).company as string;
+        localStorage.setItem('company', comp);
+        localStorage.setItem('company_name', comp);
+        // 若未提供 company_lab，依公司推導預設實驗室（例如 NCCU -> nccu_lab）
+        const existingLab = localStorage.getItem('company_lab');
+        if (!existingLab) {
+          const derivedLab = `${comp}`.toLowerCase().replace(/\s+/g, '_') + '_lab';
+          localStorage.setItem('company_lab', derivedLab);
+        }
+      }
+
+      // 若登入回傳沒有包含權限，不再呼叫 /getUsers（避免 401），改給最小集
 
       // 若仍沒有權限，給最小集（避免界面空白）
       if (!localStorage.getItem('user_permissions')) {
         localStorage.setItem('user_permissions', JSON.stringify(['view_data', 'change_password']));
+        if (!localStorage.getItem('is_superuser')) localStorage.setItem('is_superuser', 'false');
+      }
+
+      // 確保 superuser 具備預設公司與實驗室，以免 WS 或品牌顯示異常
+      const userPerms = JSON.parse(localStorage.getItem('user_permissions') || '[]') as string[];
+      if (userPerms.includes('create_user') && !localStorage.getItem('company_lab')) {
+        localStorage.setItem('company_lab', 'nccu_lab');
       }
       
       navigate('/dashboard');

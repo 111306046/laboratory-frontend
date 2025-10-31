@@ -52,7 +52,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
           } else {
             userRole = '管理員';
           }
-        } else if (permissions.includes('modify_lab')) {
+        } else if (permissions.includes('modify_lab') || permissions.includes('get_labs')) {
           userRole = '實驗室管理員';
         } else if (permissions.includes('view_data')) {
           userRole = '數據查看者';
@@ -81,6 +81,11 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
 
   // 檢查用戶是否有特定權限
   const hasPermission = (permission: string): boolean => {
+    if (permission === 'none') return true;
+    if (permission === 'superuser') {
+      const isSuper = localStorage.getItem('is_superuser') === 'true' || userInfo.user_id === 'yezyez' || userInfo.permissions.includes('superuser');
+      return isSuper;
+    }
     return userInfo.permissions.includes(permission);
   };
 
@@ -93,6 +98,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       { title: '統計圖表', path: '/static-chart', icon: <FiBarChart2 size={20} />, requiredPermission: 'view_statistics' },
       { title: '用戶管理', path: '/PU-addusers', icon: <FiUser size={20} />, requiredPermission: 'get_users' },
       { title: '實驗室管理', path: '/PU-laboratarymnagement', icon: <FiSettings size={20} />, requiredPermission: 'get_labs' },
+      { title: '公司管理', path: '/manage-company', icon: <FiSettings size={20} />, requiredPermission: 'superuser' },
     ];
 
     return allNavItems.filter(item => {

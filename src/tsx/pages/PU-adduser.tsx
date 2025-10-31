@@ -329,7 +329,8 @@ const AdminManagement = () => {
         },
         body: JSON.stringify({
           account: editingUser.account,
-          func_permissions: editingUser.func_permissions
+          func_permissions: editingUser.func_permissions,
+          company: editingUser.company
         })
       });
 

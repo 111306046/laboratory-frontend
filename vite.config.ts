@@ -9,9 +9,9 @@ export default defineConfig({
     // 保留代理配置作為備用
     proxy: {
       '/api': {
-        target: 'http://13.211.240.55',
+        target: 'https://trochanteral-noncollusive-eunice.ngrok-free.dev',
         changeOrigin: true,
-        secure: false,
+        secure: true,
         rewrite: (path) => path.replace(/^\/api/, '/api')
       }
     },

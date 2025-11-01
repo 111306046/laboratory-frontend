@@ -21,7 +21,7 @@ function App() {
         <Route path="/dashboard" element={<ProtectedRoute><Layout><Home /></Layout></ProtectedRoute>} />
         <Route path="/PU-addusers" element={<ProtectedRoute><Layout><AddUser /></Layout></ProtectedRoute>} />
         <Route path="/PU-laboratarymnagement" element={<ProtectedRoute><Layout><LaboratoryManagement /></Layout></ProtectedRoute>} />        
-        <Route path="/alert" element={<ProtectedRoute><Layout><Alert /></Layout></ProtectedRoute>} />
+        <Route path="/alert" element={<ProtectedRoute requiredPermission="view_alerts"><Layout><Alert /></Layout></ProtectedRoute>} />
         <Route path="/manage-company" element={<ProtectedRoute><Layout><ManageCompany /></Layout></ProtectedRoute>} />
         <Route path="/managecompany" element={<ProtectedRoute><Layout><ManageCompany /></Layout></ProtectedRoute>} />
         <Route path="/static-chart" element={<ProtectedRoute><Layout><StaticChart /></Layout></ProtectedRoute>} />

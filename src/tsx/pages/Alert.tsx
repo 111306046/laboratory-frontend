@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Bell, Settings, Save, AlertTriangle, CheckCircle, XCircle, Wifi, WifiOff, RefreshCw } from 'lucide-react';
-import { generateBindingCode, getThresholds, getThresholdBySensor, setThresholds, ThresholdItem } from '../services/api';
+import { generateBindingCode, getThresholds, getThresholdBySensor, setThresholds, ThresholdItem, getUsers, UserInfo, getLabs, deleteThresholds } from '../services/api';
 
 // 警報介面定義
 interface AlertItem {
@@ -43,6 +43,24 @@ const Alert = () => {
   const [bindingExpiresAt, setBindingExpiresAt] = useState<number | null>(null);
   const [bindingCountdown, setBindingCountdown] = useState<number>(0);
   const [bindingLoading, setBindingLoading] = useState<boolean>(false);
+  
+  // 新增警報設定相關狀態
+  const [showAddAlertModal, setShowAddAlertModal] = useState(false);
+  const [newAlertSensor, setNewAlertSensor] = useState<string>('temperature');
+  const [newAlertMin, setNewAlertMin] = useState<number>(0);
+  const [newAlertMax, setNewAlertMax] = useState<number>(100);
+  
+  // 可用的感測器列表
+  const availableSensors = [
+    { value: 'temperature', label: '溫度', unit: '°C' },
+    { value: 'humidity', label: '濕度', unit: '%' },
+    { value: 'co2', label: 'CO2', unit: 'ppm' },
+    { value: 'pm25', label: 'PM2.5', unit: 'µg/m³' },
+    { value: 'pm10', label: 'PM10', unit: 'µg/m³' },
+    { value: 'pm25_average', label: 'PM2.5 平均', unit: 'µg/m³' },
+    { value: 'pm10_average', label: 'PM10 平均', unit: 'µg/m³' },
+    { value: 'tvoc', label: 'TVOC', unit: 'ppm' }
+  ];
 
   // API 函數
   const apiCall = async (endpoint: string, options: RequestInit = {}) => {
@@ -73,19 +91,153 @@ const Alert = () => {
     }
   };
 
+  // 當前用戶的 lab 信息（從 API 獲取）
+  const [userLab, setUserLab] = useState<string | null>(null);
+  
+  // 從 API 獲取當前用戶的 lab 信息
+  // 注意：lab 信息存儲在實驗室數據中，不是用戶數據中
+  // 需要從所有實驗室中查找包含該用戶的實驗室
+  const fetchUserLab = async () => {
+    try {
+      const userAccount = localStorage.getItem('user_account');
+      if (!userAccount) {
+        console.warn('未找到用戶帳號，無法獲取 lab 信息');
+        return;
+      }
+      
+      console.log('🔍 開始獲取用戶 lab 信息，帳號:', userAccount);
+      
+      // 獲取所有實驗室列表
+      const labs = await getLabs();
+      console.log('📋 獲取到的實驗室列表:', labs);
+      
+      // 查找包含該用戶的實驗室
+      // 後端的 lab 數據結構中應該有 users 或 accounts 字段來存儲用戶列表
+      // 遍歷所有實驗室，查找包含當前用戶帳號的實驗室
+      let foundLab: string | null = null;
+      
+      for (const lab of labs) {
+        // 檢查 lab 數據中是否包含該用戶
+        // 可能的字段名稱：users, accounts, user_accounts 等
+        const labData = lab as any; // 使用 any 以訪問可能存在的字段
+        
+        // 檢查各種可能的用戶字段
+        if (labData.users && Array.isArray(labData.users)) {
+          if (labData.users.includes(userAccount)) {
+            foundLab = lab.name;
+            console.log('✅ 在實驗室中找到用戶:', lab.name, '用戶列表:', labData.users);
+            break;
+          }
+        } else if (labData.accounts && Array.isArray(labData.accounts)) {
+          if (labData.accounts.includes(userAccount)) {
+            foundLab = lab.name;
+            console.log('✅ 在實驗室中找到用戶:', lab.name, '帳號列表:', labData.accounts);
+            break;
+          }
+        } else if (labData.user_accounts && Array.isArray(labData.user_accounts)) {
+          if (labData.user_accounts.includes(userAccount)) {
+            foundLab = lab.name;
+            console.log('✅ 在實驗室中找到用戶:', lab.name, '帳號列表:', labData.user_accounts);
+            break;
+          }
+        }
+      }
+      
+      if (foundLab) {
+        // 直接使用後端返回的實驗室名稱，不做任何轉換
+        setUserLab(foundLab);
+        console.log('✅ 從實驗室數據中找到用戶 lab:', foundLab, '帳號:', userAccount);
+      } else {
+        console.warn('⚠️ 在所有實驗室中找不到該用戶，帳號:', userAccount);
+        console.warn('  實驗室列表:', labs.map(l => ({ name: l.name, company: l.company })));
+        console.warn('  請確認後端 lab 數據中是否包含 users/accounts/user_accounts 字段');
+        
+        // 如果找不到，嘗試使用 localStorage 中的值作為後備
+        const fallbackLab = localStorage.getItem('user_lab') || localStorage.getItem('company_lab');
+        if (fallbackLab) {
+          try {
+            const parsed = JSON.parse(fallbackLab);
+            const labValue = Array.isArray(parsed) ? parsed[0] : parsed;
+            if (labValue && typeof labValue === 'string') {
+              console.warn('⚠️ 使用 localStorage 中的後備值:', labValue);
+              setUserLab(labValue);
+            }
+          } catch {
+            if (typeof fallbackLab === 'string') {
+              console.warn('⚠️ 使用 localStorage 中的後備值:', fallbackLab);
+              setUserLab(fallbackLab);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ 獲取用戶 lab 信息失敗:', error);
+    }
+  };
+  
+  // 獲取用戶的 lab 信息（優先級：從 API 獲取的 userLab > localStorage 中的 user_lab > company_lab > 默認值）
+  const getUserLab = (): string => {
+    // 首先使用從 API 獲取的 lab
+    if (userLab) {
+      console.log('使用從 API 獲取的 lab:', userLab);
+      return userLab;
+    }
+    
+    // 其次嘗試從 localStorage 中的 user_lab 獲取
+    try {
+      const userLabStr = localStorage.getItem('user_lab');
+      if (userLabStr) {
+        const parsedLab = JSON.parse(userLabStr);
+        if (Array.isArray(parsedLab) && parsedLab.length > 0) {
+          console.log('使用 localStorage 中的 user_lab (數組):', parsedLab[0]);
+          return parsedLab[0];
+        } else if (typeof parsedLab === 'string' && parsedLab) {
+          console.log('使用 localStorage 中的 user_lab (字符串):', parsedLab);
+          return parsedLab;
+        }
+      }
+    } catch (e) {
+      console.warn('無法解析 user_lab:', e);
+    }
+    
+    // 再次嘗試從 company_lab 獲取
+    const companyLab = localStorage.getItem('company_lab');
+    if (companyLab) {
+      console.warn('⚠️ 使用 company_lab 作為後備:', companyLab);
+      return companyLab;
+    }
+    
+    // 最後使用默認值（不應該發生，因為應該已經從 API 獲取）
+    console.error('❌ 未找到 lab 信息，使用默認值');
+    console.error('  這不應該發生！請檢查：');
+    console.error('  1. 後端 /getUsers API 是否返回用戶的 lab 字段');
+    console.error('  2. 用戶帳號是否正確保存在 localStorage (user_account)');
+    console.error('  3. fetchUserLab 函數是否成功執行');
+    return 'nccu_lab';
+  };
+
   // 載入警報設定
   const loadAlerts = async () => {
     try {
       setLoading(true);
       setError(null);
       const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
-      const lab = localStorage.getItem('company_lab') || 'nccu_lab';
-      // 後端對 getThresholds 可能要求 sensor，這裡以常見感測器清單並行請求
-      const sensors = ['temperature', 'humidity', 'co2', 'pm25', 'pm10'];
+      const lab = getUserLab();
+      
+      if (!lab) {
+        console.warn('⚠️ 無法獲取 lab 信息，無法載入警報設定');
+        setAlerts([]); // 顯示空狀態
+        return;
+      }
+      
+      console.log('載入警報設定 - company:', company, 'lab:', lab);
+      // 後端對 getThresholds 可能要求 sensor，這裡以所有感測器清單並行請求
+      const sensors = ['temperature', 'humidity', 'co2', 'pm25', 'pm10', 'pm25_average', 'pm10_average', 'tvoc'];
       const fetched = await Promise.all(
         sensors.map(async (s) => {
           const one = await getThresholdBySensor({ company, lab, sensor: s });
-          return one ?? { company, lab, sensor: s, min: null, max: null, enabled: true } as ThresholdItem;
+          // 如果沒有數據（返回 null），返回一個標記為「未設定」的項目
+          return one;
         })
       );
 
@@ -96,19 +248,31 @@ const Alert = () => {
           case 'co2': return 'ppm';
           case 'pm25': return 'µg/m³';
           case 'pm10': return 'µg/m³';
+          case 'pm25_average': return 'µg/m³';
+          case 'pm10_average': return 'µg/m³';
+          case 'tvoc': return 'ppm';
           default: return '';
         }
       };
 
-      const items = fetched;
-      const mapped: AlertItem[] = items.map((it, idx) => ({
+      // 只顯示有設定過的警報（過濾掉 null）
+      const itemsWithData = fetched.filter((it): it is ThresholdItem => it !== null);
+      
+      if (itemsWithData.length === 0) {
+        // 沒有任何設定，顯示空狀態
+        setAlerts([]);
+        setLastSync(new Date());
+        return;
+      }
+
+      const mapped: AlertItem[] = itemsWithData.map((it, idx) => ({
         id: idx + 1,
         name: `${it.sensor} 監控`,
         parameter: it.sensor,
         unit: unitOf(it.sensor),
-        minValue: typeof (it.threshold?.min ?? it.min) === 'number' ? (it.threshold?.min ?? it.min)! : 0,
-        maxValue: typeof (it.threshold?.max ?? it.max) === 'number' ? (it.threshold?.max ?? it.max)! : 0,
-        enabled: (it.threshold?.enabled ?? it.enabled) ?? true,
+        minValue: typeof (it.threshold?.min) === 'number' ? it.threshold.min : 0,
+        maxValue: typeof (it.threshold?.max) === 'number' ? it.threshold.max : 0,
+        enabled: (it.threshold?.enabled) ?? true,
         priority: 'medium'
       }));
 
@@ -116,13 +280,10 @@ const Alert = () => {
       setLastSync(new Date());
     } catch (error: any) {
       console.error('載入警報設定失敗:', error);
-      setError(error?.message || '載入警報設定失敗');
-      // 顯示回退的預設警報，避免整塊區域為空
-      setAlerts([
-        { id: 1, name: '溫度監控', parameter: 'temperature', unit: '°C', minValue: 18, maxValue: 25, enabled: true, priority: 'high' },
-        { id: 2, name: '濕度監控', parameter: 'humidity', unit: '%', minValue: 40, maxValue: 60, enabled: true, priority: 'medium' },
-        { id: 3, name: 'CO2濃度', parameter: 'co2', unit: 'ppm', minValue: 0, maxValue: 1000, enabled: true, priority: 'high' }
-      ]);
+      const errorMessage = error?.message || '載入警報設定失敗';
+      setError(errorMessage);
+      // 載入失敗時顯示空狀態，不顯示預設數據
+      setAlerts([]);
     } finally {
       setLoading(false);
     }
@@ -140,9 +301,33 @@ const Alert = () => {
 
   // 組件載入時執行
   useEffect(() => {
-    loadAlerts();
+    // 首先獲取用戶的 lab 信息
+    fetchUserLab();
     loadNotifications();
   }, []);
+  
+  // 當 userLab 更新時，重新載入警報設定
+  useEffect(() => {
+    if (userLab) {
+      loadAlerts();
+    } else {
+      // 如果還沒有 userLab，嘗試使用 localStorage 中的值載入（作為後備）
+      const fallbackLab = localStorage.getItem('user_lab') || localStorage.getItem('company_lab');
+      if (fallbackLab) {
+        try {
+          const parsedLab = JSON.parse(fallbackLab);
+          const labValue = Array.isArray(parsedLab) ? parsedLab[0] : parsedLab;
+          if (labValue && typeof labValue === 'string') {
+            loadAlerts();
+          }
+        } catch {
+          if (typeof fallbackLab === 'string') {
+            loadAlerts();
+          }
+        }
+      }
+    }
+  }, [userLab]);
 
   // 倒數計時效果
   useEffect(() => {
@@ -167,9 +352,10 @@ const Alert = () => {
       const updated = updatedAlerts.find(a => a.id === id);
       if (!updated) return;
       const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
-      const lab = localStorage.getItem('company_lab') || 'nccu_lab';
+      const lab = getUserLab();
+      console.log('更新警報 - company:', company, 'lab:', lab, 'sensor:', updated.parameter);
       await setThresholds({ company, lab, sensor: updated.parameter, min: updated.minValue, max: updated.maxValue, enabled: updated.enabled });
-    } catch (error) {
+    } catch (error: any) {
       console.error('更新警報失敗:', error);
       // 失敗時回退
       loadAlerts();
@@ -180,6 +366,61 @@ const Alert = () => {
     const alert = alerts.find(a => a.id === id);
     if (alert) {
       await updateAlert(id, 'enabled', !alert.enabled);
+    }
+  };
+  
+  // 新增警報設定
+  const handleAddAlert = async () => {
+    try {
+      const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
+      const lab = getUserLab();
+      
+      if (!lab) {
+        setError('無法獲取 lab 信息，無法新增警報設定');
+        return;
+      }
+      
+      await setThresholds({
+        company,
+        lab,
+        sensor: newAlertSensor,
+        min: newAlertMin,
+        max: newAlertMax,
+        enabled: true
+      });
+      
+      // 關閉模態框並重置表單
+      setShowAddAlertModal(false);
+      setNewAlertSensor('temperature');
+      setNewAlertMin(0);
+      setNewAlertMax(100);
+      
+      // 重新載入警報列表
+      await loadAlerts();
+    } catch (error: any) {
+      console.error('新增警報設定失敗:', error);
+      setError(error?.message || '新增警報設定失敗');
+    }
+  };
+  
+  // 刪除警報設定
+  const handleDeleteAlert = async (sensor: string) => {
+    try {
+      const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
+      const lab = getUserLab();
+      
+      if (!lab) {
+        setError('無法獲取 lab 信息，無法刪除警報設定');
+        return;
+      }
+      
+      await deleteThresholds({ company, lab, sensor });
+      
+      // 重新載入警報列表
+      await loadAlerts();
+    } catch (error: any) {
+      console.error('刪除警報設定失敗:', error);
+      setError(error?.message || '刪除警報設定失敗');
     }
   };
 
@@ -345,13 +586,29 @@ const Alert = () => {
           {/* 警報參數設置 */}
           <div className="lg:col-span-2 space-y-4">
             <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <Settings className="w-5 h-5" />
-                監控參數設置
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                  <Settings className="w-5 h-5" />
+                  監控參數設置
+                </h2>
+                <button
+                  onClick={() => setShowAddAlertModal(true)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                >
+                  <span>+</span>
+                  新增警報設定
+                </button>
+              </div>
               
               <div className="space-y-4">
-                {alerts.map(alert => (
+                {alerts.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <Bell className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p className="text-lg font-medium mb-2">尚未設定任何警報</p>
+                    <p className="text-sm">點擊「新增警報設定」按鈕開始設定</p>
+                  </div>
+                ) : (
+                  alerts.map(alert => (
                   <div key={alert.id} className={`border rounded-lg p-4 hover:shadow-md transition-shadow ${alert.enabled ? '' : 'opacity-60'}`}>
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
@@ -380,16 +637,25 @@ const Alert = () => {
                         </div>
                       </div>
                       
-                      <select
-                        value={alert.priority}
-                        onChange={(e) => updateAlert(alert.id, 'priority', e.target.value)}
-                        className="border rounded px-2 py-1 text-sm"
-                        disabled={!alert.enabled}
-                      >
-                        <option value="low">低優先級</option>
-                        <option value="medium">中優先級</option>
-                        <option value="high">高優先級</option>
-                      </select>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={alert.priority}
+                          onChange={(e) => updateAlert(alert.id, 'priority', e.target.value)}
+                          className="border rounded px-2 py-1 text-sm"
+                          disabled={!alert.enabled}
+                        >
+                          <option value="low">低優先級</option>
+                          <option value="medium">中優先級</option>
+                          <option value="high">高優先級</option>
+                        </select>
+                        <button
+                          onClick={() => handleDeleteAlert(alert.parameter)}
+                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                          title="刪除此警報設定"
+                        >
+                          <XCircle className="w-5 h-5" />
+                        </button>
+                      </div>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4">
@@ -419,7 +685,8 @@ const Alert = () => {
                       </div>
                     </div>
                   </div>
-                ))}
+                ))
+                )}
               </div>
             </div>
           </div>
@@ -522,6 +789,101 @@ const Alert = () => {
                 <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">設置已保存</h3>
                 <p className="text-gray-600">警報設置已成功更新</p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* 新增警報設定模態框 */}
+        {showAddAlertModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md mx-4 w-full">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold text-gray-900">新增警報設定</h3>
+                <button
+                  onClick={() => setShowAddAlertModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    感測器類型
+                  </label>
+                  <select
+                    value={newAlertSensor}
+                    onChange={(e) => {
+                      setNewAlertSensor(e.target.value);
+                      const sensor = availableSensors.find(s => s.value === e.target.value);
+                      if (sensor) {
+                        // 根據感測器類型設定預設範圍
+                        if (sensor.value === 'temperature') {
+                          setNewAlertMin(18);
+                          setNewAlertMax(25);
+                        } else if (sensor.value === 'humidity') {
+                          setNewAlertMin(40);
+                          setNewAlertMax(60);
+                        } else if (sensor.value === 'co2') {
+                          setNewAlertMin(0);
+                          setNewAlertMax(1000);
+                        } else {
+                          setNewAlertMin(0);
+                          setNewAlertMax(100);
+                        }
+                      }
+                    }}
+                    className="w-full border rounded px-3 py-2 text-sm"
+                  >
+                    {availableSensors.map(sensor => (
+                      <option key={sensor.value} value={sensor.value}>
+                        {sensor.label} ({sensor.unit})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      最小值 ({availableSensors.find(s => s.value === newAlertSensor)?.unit})
+                    </label>
+                    <input
+                      type="number"
+                      value={newAlertMin}
+                      onChange={(e) => setNewAlertMin(parseFloat(e.target.value) || 0)}
+                      className="w-full border rounded px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      最大值 ({availableSensors.find(s => s.value === newAlertSensor)?.unit})
+                    </label>
+                    <input
+                      type="number"
+                      value={newAlertMax}
+                      onChange={(e) => setNewAlertMax(parseFloat(e.target.value) || 0)}
+                      className="w-full border rounded px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-end gap-3 mt-6">
+                <button
+                  onClick={() => setShowAddAlertModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleAddAlert}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+                >
+                  新增
+                </button>
               </div>
             </div>
           </div>

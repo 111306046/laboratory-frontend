@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { wsService, getRecentData, SensorData } from '../services/api';
+import { wsService, getRecentData } from '../services/api';
 
 // 保留數據介面定義
 interface LabData {
   co2: number;
-  o2: number;
-  ch2o: number;
-  co: number;
-  nh3: number;
   humidity: number;
-  o3: number;
+  pm10: number;
+  pm10_average: number;
+  pm25: number;
+  pm25_average: number;
+  temperature: number;
+  tvoc: number;
 }
 
 // 移除未使用的 Sensor 介面
@@ -20,12 +21,13 @@ const Home: React.FC = () => {
   // 彙總所有實驗室感測器的平均值
   const [labData, setLabData] = useState<LabData>({
     co2: 0,
-    o2: 0,
-    ch2o: 0,
-    co: 0,
-    nh3: 0,
     humidity: 0,
-    o3: 0
+    pm10: 0,
+    pm10_average: 0,
+    pm25: 0,
+    pm25_average: 0,
+    temperature: 0,
+    tvoc: 0
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
@@ -55,14 +57,28 @@ const Home: React.FC = () => {
         
         if (recentData.length > 0) {
           const latestData = recentData[0];
+          // 處理轉換後的數據格式（getRecentData 返回的是轉換後的 SensorData）
+          // 但也要處理可能包含 values 對象的格式
+          const values = (latestData as any).values || latestData;
+          
+          // 安全地轉換數值，避免 NaN
+          const toNumber = (value: any, defaultValue: number = 0): number => {
+            if (value === null || value === undefined || value === '') {
+              return defaultValue;
+            }
+            const num = typeof value === 'number' ? value : parseFloat(String(value));
+            return isNaN(num) ? defaultValue : num;
+          };
+          
           setLabData({
-            co2: Math.round(latestData.co2),
-            o2: Math.round(latestData.o2 * 100) / 100,
-            ch2o: Math.round(latestData.ch2o * 100) / 100,
-            co: Math.round(latestData.co * 1000) / 1000,
-            nh3: Math.round(latestData.nh3 * 100) / 100,
-            humidity: Math.round(latestData.humidity),
-            o3: Math.round(latestData.o3 * 100) / 100
+            co2: Math.round(toNumber(values.co2, 0)),
+            humidity: Math.round(toNumber(values.humidity, 0) * 10) / 10, // 保留一位小數
+            pm10: Math.round(toNumber(values.pm10, 0)),
+            pm10_average: Math.round(toNumber(values.pm10_average, 0)),
+            pm25: Math.round(toNumber(values.pm25, 0)),
+            pm25_average: Math.round(toNumber(values.pm25_average, 0)),
+            temperature: Math.round(toNumber(values.temperature || values.temperatu, 0) * 10) / 10, // 保留一位小數
+            tvoc: Math.round(toNumber(values.tvoc, 0) * 1000) / 1000 // 保留三位小數
           });
           setLastUpdate(new Date());
         }
@@ -76,10 +92,16 @@ const Home: React.FC = () => {
 
     // 設置 WebSocket 連接
     const setupWebSocket = () => {
-      wsService.connect(token, 'nccu_lab');
+      const companyLab = localStorage.getItem('company_lab') || 'nccu_lab';
+      const sensor = 'aq'; // 感測器名稱
+      const currentToken = localStorage.getItem('token') || token;
+      
+      // 確保使用最新的 token
+      wsService.connect(currentToken, companyLab, sensor);
       
       wsService.on('connected', () => {
         setWsConnected(true);
+        setError(''); // 連接成功時清除錯誤
         console.log('WebSocket 已連接');
       });
       
@@ -88,18 +110,39 @@ const Home: React.FC = () => {
         console.log('WebSocket 已斷開');
       });
       
-      wsService.on('data', (data: SensorData) => {
-        // 更新即時數據
+      wsService.on('data', (data: any) => {
+        // 安全地轉換數值，避免 NaN
+        const toNumber = (value: any, defaultValue: number = 0): number => {
+          if (value === null || value === undefined || value === '') {
+            return defaultValue;
+          }
+          const num = typeof value === 'number' ? value : parseFloat(String(value));
+          return isNaN(num) ? defaultValue : num;
+        };
+
+        // 數據可能在 values 對象中（WebSocket 格式），也可能直接在頂層（API 格式）
+        const values = data.values || data;
+        
+        // 更新即時數據，使用安全的數值轉換
+        // 將現有數據映射到對應字段
         setLabData({
-          co2: Math.round(data.co2),
-          o2: Math.round(data.o2 * 100) / 100,
-          ch2o: Math.round(data.ch2o * 100) / 100,
-          co: Math.round(data.co * 1000) / 1000,
-          nh3: Math.round(data.nh3 * 100) / 100,
-          humidity: Math.round(data.humidity),
-          o3: Math.round(data.o3 * 100) / 100
-        });
+            co2: Math.round(toNumber(values.co2, 0)),
+            humidity: Math.round(toNumber(values.humidity, 0) * 10) / 10, // 保留一位小數
+            pm10: Math.round(toNumber(values.pm10, 0)),
+            pm10_average: Math.round(toNumber(values.pm10_average, 0)),
+            pm25: Math.round(toNumber(values.pm25, 0)),
+            pm25_average: Math.round(toNumber(values.pm25_average, 0)),
+            temperature: Math.round(toNumber(values.temperature || values.temperatu, 0) * 10) / 10, // 保留一位小數
+            tvoc: Math.round(toNumber(values.tvoc, 0) * 1000) / 1000 // 保留三位小數
+          });
         setLastUpdate(new Date());
+        setError(''); // 接收到數據時清除錯誤
+        
+        // 調試：記錄接收到的數據（僅在開發模式下）
+        if (import.meta.env.DEV) {
+          console.log('WebSocket 接收到的數據:', data);
+          console.log('解析後的 values:', values);
+        }
       });
       
       wsService.on('error', (error: any) => {
@@ -156,48 +199,55 @@ const Home: React.FC = () => {
             </div>
           </div>
           
-          <div className="flex flex-col items-center justify-center w-64 h-64 rounded-full border-[15px] border-yellow-400 bg-gradient-to-t from-yellow-50 to-white m-4 shadow-lg">
+          <div className="flex flex-col items-center justify-center w-64 h-64 rounded-full border-[15px] border-blue-500 bg-gradient-to-t from-blue-50 to-white m-4 shadow-lg">
             <div className="text-2xl font-bold text-center">
-              O₂<br />
-              {isLoading ? '載入中...' : `${labData.o2}%`}
+              溫度<br />
+              {isLoading ? '載入中...' : `${labData.temperature} °C`}
             </div>
           </div>
           
-          <div className="flex flex-col items-center justify-center w-64 h-64 rounded-full border-[15px] border-orange-400 bg-gradient-to-t from-yellow-50 to-white m-4 shadow-lg">
+          <div className="flex flex-col items-center justify-center w-64 h-64 rounded-full border-[15px] border-cyan-500 bg-gradient-to-t from-cyan-50 to-white m-4 shadow-lg">
             <div className="text-2xl font-bold text-center">
-              CH₂O<br />
-              {isLoading ? '載入中...' : `${labData.ch2o} ppm`}
+              溼度<br />
+              {isLoading ? '載入中...' : `${labData.humidity}%`}
             </div>
           </div>
         </div>
         
         {/* 網格數據顯示 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white p-6 rounded-lg shadow-md flex flex-col items-center">
-            <h3 className="text-lg font-medium mb-2">CO</h3>
+            <h3 className="text-lg font-medium mb-2">PM2.5</h3>
             <p className="text-3xl font-bold">
-              {isLoading ? '載入中...' : `${labData.co}%`}
+              {isLoading ? '載入中...' : `${labData.pm25} μg/m³`}
             </p>
           </div>
           
           <div className="bg-white p-6 rounded-lg shadow-md flex flex-col items-center">
-            <h3 className="text-lg font-medium mb-2">NH₃</h3>
+            <h3 className="text-lg font-medium mb-2">PM2.5 平均值</h3>
             <p className="text-3xl font-bold">
-              {isLoading ? '載入中...' : `${labData.nh3} ppm`}
+              {isLoading ? '載入中...' : `${labData.pm25_average} μg/m³`}
             </p>
           </div>
           
           <div className="bg-white p-6 rounded-lg shadow-md flex flex-col items-center">
-            <h3 className="text-lg font-medium mb-2">溼度</h3>
+            <h3 className="text-lg font-medium mb-2">PM10</h3>
             <p className="text-3xl font-bold">
-              {isLoading ? '載入中...' : `${labData.humidity} ppm`}
+              {isLoading ? '載入中...' : `${labData.pm10} μg/m³`}
             </p>
           </div>
           
           <div className="bg-white p-6 rounded-lg shadow-md flex flex-col items-center">
-            <h3 className="text-lg font-medium mb-2">O₃</h3>
+            <h3 className="text-lg font-medium mb-2">PM10 平均值</h3>
             <p className="text-3xl font-bold">
-              {isLoading ? '載入中...' : `${labData.o3} ppm`}
+              {isLoading ? '載入中...' : `${labData.pm10_average} μg/m³`}
+            </p>
+          </div>
+          
+          <div className="bg-white p-6 rounded-lg shadow-md flex flex-col items-center md:col-span-2 lg:col-span-4">
+            <h3 className="text-lg font-medium mb-2">TVOC</h3>
+            <p className="text-3xl font-bold">
+              {isLoading ? '載入中...' : `${labData.tvoc} ppm`}
             </p>
           </div>
         </div>

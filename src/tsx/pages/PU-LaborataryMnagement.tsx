@@ -14,6 +14,7 @@ interface Laboratory {
   description: string;
   sensors: Sensor[];
   company: string;
+  delete_time?: string; // 刪除時間，如果有此字段表示實驗室已被刪除
 }
 
 const LaboratoryManagement = () => {
@@ -67,6 +68,7 @@ const LaboratoryManagement = () => {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true', // 跳過 ngrok 的瀏覽器警告頁面
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
@@ -76,7 +78,9 @@ const LaboratoryManagement = () => {
       }
 
       const data = await response.json();
-      setLaboratories(data || []);
+      // 過濾掉有 delete_time 的實驗室（已刪除的實驗室不顯示）
+      const activeLabs = (data || []).filter((lab: Laboratory) => !lab.delete_time);
+      setLaboratories(activeLabs);
     } catch (err) {
       setError(err instanceof Error ? err.message : '獲取實驗室列表失敗');
       console.error('獲取實驗室列表失敗:', err);
@@ -109,6 +113,7 @@ const LaboratoryManagement = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true', // 跳過 ngrok 的瀏覽器警告頁面
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({
@@ -152,6 +157,7 @@ const LaboratoryManagement = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true', // 跳過 ngrok 的瀏覽器警告頁面
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({
@@ -179,10 +185,54 @@ const LaboratoryManagement = () => {
   };
 
   // 刪除實驗室
-  const deleteLab = (labId: string) => {
-    if (window.confirm('確定要刪除此實驗室嗎？這將同時刪除所有相關的感測器。')) {
-      // 注意：後端API文檔中沒有刪除實驗室的API，這裡只是從前端狀態中移除
-      setLaboratories(laboratories.filter(lab => lab.id !== labId));
+  const handleDeleteLab = async (lab: Laboratory) => {
+    if (!window.confirm(`確定要刪除實驗室 "${lab.name}" 嗎？這將同時刪除所有相關的感測器。`)) {
+      return;
+    }
+    
+    try {
+      const response = await fetch('https://trochanteral-noncollusive-eunice.ngrok-free.dev/api/deleteLab', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true', // 跳過 ngrok 的瀏覽器警告頁面
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          id: lab.id,
+          company: lab.company
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = '刪除實驗室失敗';
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.detail) {
+            if (Array.isArray(errorData.detail)) {
+              errorMessage = errorData.detail.map((e: any) => {
+                const field = e.loc?.join('.') || '未知字段';
+                return `${field}: ${e.msg}`;
+              }).join(', ');
+            } else if (typeof errorData.detail === 'string') {
+              errorMessage = errorData.detail;
+            }
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+        } catch (e) {
+          errorMessage = `刪除實驗室失敗 (${response.status})`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      alert('實驗室刪除成功！');
+      fetchLabs(); // 重新獲取實驗室列表
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '刪除實驗室失敗';
+      alert(errorMsg);
+      console.error('刪除實驗室失敗:', err);
     }
   };
 
@@ -215,6 +265,7 @@ const LaboratoryManagement = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true', // 跳過 ngrok 的瀏覽器警告頁面
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({
@@ -256,6 +307,7 @@ const LaboratoryManagement = () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true', // 跳過 ngrok 的瀏覽器警告頁面
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           },
           body: JSON.stringify({
@@ -455,7 +507,7 @@ const LaboratoryManagement = () => {
                   📡 感測器
                 </button>
                 <button
-                  onClick={() => deleteLab(lab.id)}
+                  onClick={() => handleDeleteLab(lab)}
                   className="px-3 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
                 >
                   🗑️

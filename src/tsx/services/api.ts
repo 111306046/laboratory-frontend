@@ -1,10 +1,13 @@
 // API 服務文件 - 處理所有後端 API 調用
 
-// API 基礎配置：使用相對路徑以配合 Vite 代理，避免 CORS
-const API_BASE_URL = '/api';
-const WS_BASE_URL = 'ws://13.211.240.55/ws';
+// API 基礎配置
+// 開發環境使用代理避免 CORS 問題，生產環境使用完整 URL
+const API_BASE_URL = import.meta.env.DEV 
+  ? '/api'  // 通過 Vite 代理（vite.config.ts 中已配置）
+  : 'https://trochanteral-noncollusive-eunice.ngrok-free.dev/api';
+const WS_BASE_URL = 'wss://trochanteral-noncollusive-eunice.ngrok-free.dev/ws';
 
-// 數據介面定義
+// 資料介面定義
 export interface RecentDataParams {
   company_lab: string;
   machine: string;
@@ -37,7 +40,7 @@ export interface RawSensorData {
   };
 }
 
-// 處理後的傳感器數據介面
+// 處理後的感測器資料介面
 export interface SensorData {
   timestamp: string;
   machine: string;
@@ -49,12 +52,12 @@ export interface SensorData {
   pm10_ave: number;   // PM10 平均值
   co2: number;        // 二氧化碳
   tvoc: number;       // 總揮發性有機化合物
-  // 為了向後兼容，保留一些舊欄位
+  // 為了向後相容，保留一些舊欄位
   temperature?: number;
   status?: 'normal' | 'warning' | 'critical';
 }
 
-// 數據轉換函數：將原始 API 響應轉換為處理後的格式
+// 資料轉換函數：將原始 API 響應轉換為處理後的格式
 export function transformRawSensorData(rawData: RawSensorData): SensorData {
   return {
     timestamp: rawData.timestamp,
@@ -67,7 +70,7 @@ export function transformRawSensorData(rawData: RawSensorData): SensorData {
     pm10_ave: rawData.values.pm10_average,
     co2: rawData.values.co2,
     tvoc: rawData.values.tvoc,
-    // 向後兼容
+    // 向後相容
     temperature: rawData.values.temperature,
     status: 'normal' // 可以根據數值計算狀態
   };
@@ -92,32 +95,302 @@ export interface UserInfo {
   func_permissions: string[];
   company: string;
   company_lab?: string;
+  lab?: string | string[]; // 實驗室，可以是單個字符串或字符串陣列（支援多個實驗室）
+}
+
+// Refresh token 響應介面
+interface RefreshTokenResponse {
+  access_token: string;
+  refresh_token: string; // 新的 refresh_token（token rotation）
+}
+
+// Refresh token 相關的全局變數（避免並發刷新）
+let isRefreshing = false;
+let refreshPromise: Promise<string | null> | null = null;
+
+// Refresh token API 函數
+async function refreshAccessToken(): Promise<string | null> {
+  // 如果正在刷新，返回現有的 Promise
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise;
+  }
+
+  const refreshToken = localStorage.getItem('refresh_token');
+  if (!refreshToken) {
+    console.warn('沒有 refresh_token，無法刷新 access_token');
+    return null;
+  }
+
+  // 設置刷新標誌
+  isRefreshing = true;
+  refreshPromise = (async () => {
+    try {
+      console.log('🔄 開始刷新 access_token...');
+      const response = await fetch(`${API_BASE_URL}/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+        // 添加 credentials 以處理 CORS
+        credentials: 'omit', // 不使用 credentials，避免 CORS 問題
+      });
+
+      // 檢查是否為 CORS 錯誤
+      if (response.status === 0 || response.type === 'opaque') {
+        console.error('❌ CORS 錯誤：後端 /api/refresh 端點未正確配置 CORS');
+        console.error('請確認後端已配置以下 CORS 設置：');
+        console.error('  - Access-Control-Allow-Origin: * 或包含前端域名');
+        console.error('  - Access-Control-Allow-Methods: POST');
+        console.error('  - Access-Control-Allow-Headers: Content-Type');
+        // 清除認證資訊
+        localStorage.removeItem('token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user_account');
+        localStorage.removeItem('user_permissions');
+        return null;
+      }
+
+      if (!response.ok) {
+        // 嘗試讀取錯誤詳情
+        let errorDetail = '';
+        let errorData: any = null;
+        try {
+          const errorText = await response.text();
+          if (errorText) {
+            try {
+              errorData = JSON.parse(errorText);
+              errorDetail = errorData.detail || errorData.message || errorText;
+              // 處理 FastAPI 的 detail 格式（可能是字符串或數組）
+              if (Array.isArray(errorData.detail)) {
+                errorDetail = errorData.detail.map((e: any) => 
+                  `${e.loc?.join('.')}: ${e.msg}`
+                ).join(', ');
+              } else if (typeof errorData.detail === 'string') {
+                errorDetail = errorData.detail;
+              }
+            } catch {
+              errorDetail = errorText;
+            }
+          }
+        } catch (e) {
+          // 無法讀取錯誤詳情
+          console.warn('無法讀取錯誤響應:', e);
+        }
+
+        console.error(`❌ 刷新 token 失敗: ${response.status} ${response.statusText}`);
+        if (errorDetail) {
+          console.error('錯誤詳情:', errorDetail);
+        }
+        
+        // 特別處理 401 錯誤
+        if (response.status === 401) {
+          console.error('🔍 401 Unauthorized 錯誤分析：');
+          console.error('可能的原因：');
+          console.error('  1. refresh_token 無效或已過期');
+          console.error('  2. refresh_token 格式不正確');
+          console.error('  3. 後端驗證邏輯失敗');
+          console.error('');
+          console.error('調試信息：');
+          const storedRefreshToken = localStorage.getItem('refresh_token');
+          if (storedRefreshToken) {
+            console.error('  - localStorage 中有 refresh_token:', storedRefreshToken.substring(0, 20) + '...');
+            // 嘗試解析 JWT（如果可能）
+            try {
+              const parts = storedRefreshToken.split('.');
+              if (parts.length === 3) {
+                const payload = JSON.parse(atob(parts[1]));
+                console.error('  - refresh_token 內容:', {
+                  account: payload.account || '未知',
+                  exp: payload.exp ? new Date(payload.exp * 1000).toLocaleString('zh-TW') : '未知',
+                  isExpired: payload.exp ? Date.now() > payload.exp * 1000 : '未知'
+                });
+              }
+            } catch (e) {
+              console.error('  - 無法解析 refresh_token（可能不是 JWT 格式）');
+            }
+          } else {
+            console.error('  - localStorage 中沒有 refresh_token');
+          }
+          console.error('  - 發送的請求體:', JSON.stringify({ refresh_token: '***' }));
+        }
+        
+        // 刷新失敗，清除所有認證資訊
+        localStorage.removeItem('token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user_account');
+        localStorage.removeItem('user_permissions');
+        return null;
+      }
+
+      const data: RefreshTokenResponse = await response.json();
+      
+      // 驗證響應數據
+      if (!data.access_token || !data.refresh_token) {
+        console.error('❌ 刷新響應格式錯誤：缺少 access_token 或 refresh_token');
+        return null;
+      }
+      
+      // 保存新的 tokens
+      localStorage.setItem('token', data.access_token);
+      localStorage.setItem('refresh_token', data.refresh_token);
+      
+      console.log('✅ 成功刷新 access_token');
+      return data.access_token;
+    } catch (error) {
+      // 區分不同類型的錯誤
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        console.error('❌ 網絡錯誤或 CORS 錯誤：無法連接到後端');
+        console.error('請確認：');
+        console.error('  1. 後端服務是否運行');
+        console.error('  2. /api/refresh 端點是否正確配置 CORS');
+      } else {
+        console.error('❌ 刷新 token 時發生錯誤:', error);
+      }
+      
+      // 清除認證資訊
+      localStorage.removeItem('token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user_account');
+      localStorage.removeItem('user_permissions');
+      return null;
+    } finally {
+      // 重置刷新標誌
+      isRefreshing = false;
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
 }
 
 // 通用 API 調用函數
 async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('token');
+  // 如果是刷新 token 的請求，跳過自動刷新邏輯
+  const isRefreshEndpoint = endpoint === '/refresh';
   
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  let token = localStorage.getItem('token');
+  
+  let response = await fetch(`${API_BASE_URL}${endpoint}`, {
     headers: {
       'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': 'true', // 跳過 ngrok 的瀏覽器警告頁面
       ...(token && { 'Authorization': `Bearer ${token}` }),
       ...options.headers,
     },
     ...options,
   });
 
+  // 如果是 401 錯誤且不是刷新請求，嘗試自動刷新 token
+  if (response.status === 401 && !isRefreshEndpoint) {
+    console.log('收到 401 錯誤，嘗試刷新 token...');
+    const newToken = await refreshAccessToken();
+    
+    if (newToken) {
+      // 使用新 token 重試原請求
+      token = newToken;
+      response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          'Authorization': `Bearer ${token}`,
+          ...options.headers,
+        },
+        ...options,
+      });
+    }
+    // 如果刷新失敗，繼續執行錯誤處理邏輯
+  }
+
   if (!response.ok) {
     let errorMessage = `請求失敗 (狀態碼: ${response.status})`;
+    let hasDetailedError = false;
     
-    if (response.status === 502) {
-      errorMessage = "服務器暫時無法連接，請稍後再試";
-    } else if (response.status === 404) {
-      errorMessage = "API 端點不存在";
-    } else if (response.status === 500) {
-      errorMessage = "服務器內部錯誤";
-    } else if (response.status === 401) {
-      errorMessage = "未授權，請重新登入";
+    // 嘗試讀取錯誤響應的詳細信息
+    try {
+      let errorText: string;
+      try {
+        // 先嘗試克隆響應
+        errorText = await response.clone().text();
+      } catch {
+        // 如果克隆失敗，直接讀取（可能已經被讀取過，但對於錯誤響應通常可以再讀一次）
+        errorText = await response.text();
+      }
+      
+      if (errorText && !errorText.trim().startsWith('<!DOCTYPE')) {
+        try {
+          const errorJson = JSON.parse(errorText);
+          if (errorJson.detail) {
+            // FastAPI 錯誤格式
+            if (Array.isArray(errorJson.detail)) {
+              errorMessage = errorJson.detail.map((e: any) => 
+                `${e.loc?.join('.')}: ${e.msg}`
+              ).join(', ') || errorMessage;
+              hasDetailedError = errorJson.detail.length > 0;
+            } else if (typeof errorJson.detail === 'string') {
+              errorMessage = errorJson.detail;
+              hasDetailedError = true;
+            } else {
+              errorMessage = JSON.stringify(errorJson.detail);
+              hasDetailedError = true;
+            }
+          } else if (errorJson.message) {
+            errorMessage = errorJson.message;
+            hasDetailedError = true;
+          }
+        } catch {
+          // 如果不是 JSON，使用原始文本的前 200 字符
+          if (errorText.length < 200) {
+            errorMessage = errorText;
+            hasDetailedError = true;
+          }
+        }
+      }
+    } catch {
+      // 如果無法讀取錯誤信息，使用默認消息
+    }
+    
+    // 根據狀態碼設置默認錯誤消息（僅當沒有詳細錯誤信息時）
+    if (!hasDetailedError) {
+      if (response.status === 502) {
+        errorMessage = "服務器暫時無法連接，請稍後再試";
+      } else if (response.status === 404) {
+        errorMessage = "API 端點不存在";
+      } else if (response.status === 500) {
+        errorMessage = "服務器內部錯誤";
+      } else if (response.status === 401) {
+        errorMessage = "未授權，請重新登入";
+        // 只有在刷新 token 也失敗或沒有 refresh_token 時才清除認證資訊
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (!refreshToken || isRefreshEndpoint) {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('token');
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('user_account');
+            localStorage.removeItem('user_permissions');
+          }
+        }
+      } else if (response.status === 403) {
+        errorMessage = "權限不足，無法執行此操作";
+      } else if (response.status === 422) {
+        errorMessage = `請求參數驗證失敗: ${errorMessage}`;
+      }
+    } else {
+      // 如果有詳細錯誤信息，但狀態碼是 403，確保顯示權限相關的提示
+      if (response.status === 403 && (errorMessage.includes('Not authenticated') || errorMessage === `請求失敗 (狀態碼: ${response.status})`)) {
+        errorMessage = "權限不足，無法執行此操作";
+      }
+      // 401 時清除認證資訊（如果刷新也失敗）
+      if (response.status === 401 && typeof window !== 'undefined') {
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (!refreshToken || isRefreshEndpoint) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('user_account');
+          localStorage.removeItem('user_permissions');
+        }
+      }
     }
     
     throw new Error(errorMessage);
@@ -143,7 +416,7 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
     contentType.includes('application/octet-stream') ||
     contentType.includes('application/zip')
   )) {
-    // 處理 Excel 文件響應
+    // 處理 Excel 檔案響應
     const blob = await response.blob();
     return {
       type: 'excel',
@@ -153,22 +426,31 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
   } else {
     // 處理 JSON 響應
     try {
-      return await response.json();
-    } catch (error) {
-      // 如果不是有效的 JSON，先克隆響應再讀取文本
-      const clonedResponse = response.clone();
+      const text = await response.text();
+      
+      // 檢查是否為 HTML 響應（可能是 ngrok 警告頁面或其他錯誤頁面）
+      if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<!doctype')) {
+        console.error('API 返回了 HTML 頁面而非 JSON:', text.substring(0, 200));
+        throw new Error('API 返回了 HTML 頁面，請檢查 API 端點是否正確或服務器是否正常運行');
+      }
+      
       try {
-        const text = await clonedResponse.text();
+        return JSON.parse(text) as T;
+      } catch (parseError) {
         console.error('API 響應不是有效的 JSON:', text.substring(0, 100));
         throw new Error(`API 響應格式錯誤: ${text.substring(0, 50)}...`);
-      } catch (textError) {
-        throw new Error(`API 響應格式錯誤，無法解析為 JSON 或文本`);
       }
+    } catch (error) {
+      // 如果讀取失敗
+      if (error instanceof Error && (error.message.includes('API 響應格式錯誤') || error.message.includes('API 返回了 HTML'))) {
+        throw error;
+      }
+      throw new Error(`API 響應格式錯誤，無法解析為 JSON 或文本`);
     }
   }
 }
 
-// 從響應中提取文件名
+// 從響應中提取檔案名稱
 function getFilenameFromResponse(response: Response): string | null {
   const contentDisposition = response.headers.get('content-disposition');
   if (contentDisposition) {
@@ -197,7 +479,7 @@ function parseXMLToJSON(xmlText: string): any {
     return xmlToJson(xmlDoc.documentElement);
   } catch (error) {
     console.error('XML 解析失敗:', error);
-    throw new Error('數據格式錯誤');
+    throw new Error('資料格式錯誤');
   }
 }
 
@@ -241,7 +523,7 @@ function xmlToJson(xml: Element): any {
 
 // API 函數
 
-// 1. 獲取最近數據
+// 1. 獲取最近資料
 export async function getRecentData(params: RecentDataParams): Promise<SensorData[]> {
   const queryParams = new URLSearchParams({
     company_lab: params.company_lab,
@@ -251,11 +533,11 @@ export async function getRecentData(params: RecentDataParams): Promise<SensorDat
   
   const rawData = await apiCall<RawSensorData[]>(`/getRecentData?${queryParams}`);
   
-  // 轉換原始數據為處理後的格式
+  // 轉換原始資料為處理後的格式
   return rawData.map(transformRawSensorData);
 }
 
-// 2. 搜索數據
+// 2. 搜尋資料
 export async function searchData(params: SearchDataParams): Promise<SensorData[] | ExcelResponse> {
   // 將所有查詢參數做 URL 安全編碼，避免空白與特殊字元造成解析問題
   const queryParts = [
@@ -271,7 +553,7 @@ export async function searchData(params: SearchDataParams): Promise<SensorData[]
     queryParts.push('format=json');
   }
   const query = queryParts.join('&');
-  // 調試輸出：觀察實際查詢參數（可於生產環境移除）
+  // 除錯輸出：觀察實際查詢參數（可於生產環境移除）
   if (typeof window !== 'undefined') {
     // eslint-disable-next-line no-console
     console.debug('[searchData] query', {
@@ -291,7 +573,7 @@ export async function searchData(params: SearchDataParams): Promise<SensorData[]
     return result as ExcelResponse;
   }
   
-  // 轉換原始數據為處理後的格式
+  // 轉換原始資料為處理後的格式
   const rawData = result as RawSensorData[];
   return rawData.map(transformRawSensorData);
 }
@@ -322,7 +604,7 @@ export async function parseExcelToSensorData(excel: ExcelResponse): Promise<Sens
         return Number.isFinite(n) ? Number(n) : 0;
       };
 
-      // 兼容不同欄位命名
+      // 相容不同欄位命名
       const temperature = row.temperatu ?? row.temperature ?? row.temp ?? 0;
       const pm25Ave = row.pm25_ave ?? row.pm25_average ?? row.pm25Avg ?? 0;
       const pm10Ave = row.pm10_ave ?? row.pm10_average ?? row.pm10Avg ?? 0;
@@ -349,7 +631,7 @@ export async function parseExcelToSensorData(excel: ExcelResponse): Promise<Sens
   }
 }
 
-// 下載 Excel 文件
+// 下載 Excel 檔案
 export function downloadExcelFile(excelResponse: ExcelResponse): void {
   const url = window.URL.createObjectURL(excelResponse.blob);
   const link = document.createElement('a');
@@ -364,6 +646,7 @@ export function downloadExcelFile(excelResponse: ExcelResponse): void {
 // 3. 登入
 export interface LoginResponse {
   access_token: string;
+  refresh_token?: string; // 刷新令牌，用於刷新 access_token
   func_permissions?: string[];
   company?: string;
 }
@@ -417,6 +700,19 @@ export async function modifyLab(labData: LabInfo): Promise<{ message: string }> 
   });
 }
 
+// 10. 刪除實驗室
+export interface DeleteLabRequest {
+  id: string;
+  company: string;
+}
+
+export async function deleteLab(payload: DeleteLabRequest): Promise<{ message: string }> {
+  return apiCall<{ message: string }>('/deleteLab', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 // WebSocket 連接管理
 export class WebSocketService {
   private ws: WebSocket | null = null;
@@ -424,15 +720,30 @@ export class WebSocketService {
   private maxReconnectAttempts = 5;
   private reconnectInterval = 3000;
   private listeners: Map<string, Function[]> = new Map();
+  private lastSensor?: string; // 儲存最後使用的 sensor 參數
 
-  connect(token: string, companyLab: string = 'nccu_lab'): void {
+  connect(token: string, companyLab: string = 'nccu_lab', sensor?: string): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       return;
     }
 
-    // 嘗試不同的 WebSocket URL 格式
-    const wsUrl = `${WS_BASE_URL}/${companyLab}?token=${token}`;
-    console.log('嘗試連接 WebSocket:', wsUrl);
+    // 如果已有連接，先關閉
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+
+    // 儲存參數以便重連時使用
+    if (sensor) {
+      this.lastSensor = sensor;
+    }
+
+    // 構建 WebSocket URL，包含 token 和可選的 sensor 參數
+    let wsUrl = `${WS_BASE_URL}/${companyLab}?token=${encodeURIComponent(token)}`;
+    if (sensor) {
+      wsUrl += `&sensor=${encodeURIComponent(sensor)}`;
+    }
+    console.log('嘗試連接 WebSocket:', wsUrl.replace(token, 'TOKEN_HIDDEN'));
 
     this.ws = new WebSocket(wsUrl);
 
@@ -445,32 +756,60 @@ export class WebSocketService {
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        
+        // 驗證數據格式，確保必要字段存在
+        if (!data || typeof data !== 'object') {
+          console.warn('WebSocket 收到無效數據格式:', data);
+          return;
+        }
+        
+        // 記錄原始數據以便調試（僅在開發模式下）
+        if (import.meta.env.DEV) {
+          console.log('WebSocket 原始數據:', data);
+        }
+        
         this.emit('data', data);
       } catch (error) {
         console.error('WebSocket 數據解析錯誤:', error);
+        console.error('原始數據:', event.data);
         this.emit('error', error);
       }
     };
 
-    this.ws.onclose = (event) => {
+    this.ws.onclose = async (event) => {
       console.log('WebSocket 連接關閉:', event.code, event.reason);
       console.log('關閉代碼說明:', this.getCloseCodeDescription(event.code));
       this.emit('disconnected', event);
+      
       
       // 自動重連
       if (this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
         console.log(`嘗試重連 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+        
+        // 重連前嘗試獲取最新的 token（可能已刷新）
+        const currentToken = localStorage.getItem('token') || token;
+        
         setTimeout(() => {
-          this.connect(token, companyLab);
+          this.connect(currentToken, companyLab, this.lastSensor);
         }, this.reconnectInterval);
+      } else {
+        console.error('WebSocket 重連次數已達上限');
       }
     };
 
     this.ws.onerror = (error) => {
       console.error('WebSocket 錯誤:', error);
-      console.error('WebSocket URL:', wsUrl);
+      const maskedUrl = wsUrl.replace(token, 'TOKEN_HIDDEN');
+      console.error('WebSocket URL:', maskedUrl);
       console.error('Token 長度:', token.length);
+      console.error('WebSocket 狀態:', this.ws?.readyState);
+      console.error('WebSocket readyState 說明:', {
+        0: 'CONNECTING',
+        1: 'OPEN',
+        2: 'CLOSING',
+        3: 'CLOSED'
+      }[this.ws?.readyState || 0]);
       this.emit('error', error);
     };
   }
@@ -578,6 +917,7 @@ export interface DeleteThresholdsResponse {
 }
 
 export async function deleteThresholds(payload: DeleteThresholdsRequest): Promise<DeleteThresholdsResponse> {
+  // 後端 API 使用 DELETE 方法
   return apiCall<DeleteThresholdsResponse>('/deleteThresholds', {
     method: 'DELETE',
     body: JSON.stringify(payload)
@@ -628,9 +968,44 @@ export interface GetThresholdBySensorParams {
 export async function getThresholdBySensor(params: GetThresholdBySensorParams): Promise<ThresholdItem | null> {
   // 以 GET + query 為唯一方式，避免後端 405
   const query = new URLSearchParams({ company: params.company, lab: params.lab, sensor: params.sensor }).toString();
-  const result = await apiCall<ThresholdItem | ThresholdItem[] | null>(`/getThresholds?${query}`);
-  if (Array.isArray(result)) return result[0] ?? null;
-  return result as ThresholdItem | null;
+  try {
+    const result = await apiCall<any>(`/getThresholds?${query}`);
+    // 後端可能返回 {"message":"無資料"} 表示沒有數據
+    if (result && typeof result === 'object') {
+      if ('message' in result && result.message === '無資料') {
+        return null; // 沒有數據
+      }
+      // 後端返回格式：{"company": company,"lab":lab,"sensor":sensor,"threshold":threshold_in_db["threshold"]}
+      // threshold 裡面可能還有嵌套的感測器對象，例如：{"threshold": {"temperature": {"min": 20, "max": 30, "enabled": true}}}
+      if ('threshold' in result) {
+        let thresholdData = result.threshold;
+        
+        // 如果 threshold 裡面有嵌套的感測器對象（如 threshold.temperature），提取出來
+        if (thresholdData && typeof thresholdData === 'object' && params.sensor in thresholdData) {
+          thresholdData = thresholdData[params.sensor];
+        }
+        
+        return {
+          company: result.company || params.company,
+          lab: result.lab || params.lab,
+          sensor: result.sensor || params.sensor,
+          threshold: {
+            min: thresholdData?.min ?? null,
+            max: thresholdData?.max ?? null,
+            enabled: thresholdData?.enabled ?? true
+          }
+        } as ThresholdItem;
+      }
+    }
+    if (Array.isArray(result)) return result[0] ?? null;
+    return result as ThresholdItem | null;
+  } catch (error: any) {
+    // 如果是 404 或無資料的錯誤，返回 null
+    if (error?.message?.includes('無資料') || error?.message?.includes('查無')) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 // 前端更新格式轉換：後端期望 body 內含與 sensor 同名的物件
@@ -645,18 +1020,86 @@ export type ThresholdUpdate = {
 
 export async function setThresholds(item: ThresholdUpdate): Promise<{ message: string }> {
   const { company, lab, sensor, min, max, enabled } = item;
-  const payload: Record<string, unknown> = { company, lab, sensor };
-  // 後端的 Pydantic model 可能要求所有欄位都存在，未更新者給 null
+  
+  // 驗證必要字段
+  if (!sensor) {
+    throw new Error('sensor 字段是必需的');
+  }
+  if (!company) {
+    throw new Error('company 字段是必需的');
+  }
+  if (!lab) {
+    throw new Error('lab 字段是必需的');
+  }
+  
+  // 確保 min 和 max 是有效數字或 null
+  const validMin = (typeof min === 'number' && !isNaN(min)) ? min : null;
+  const validMax = (typeof max === 'number' && !isNaN(max)) ? max : null;
+  
+  // 構建感測器配置物件（後端期望每個感測器都是 Optional[dict]）
+  const sensorConfig: Record<string, unknown> = {};
+  if (validMin !== null) {
+    sensorConfig.min = validMin;
+  }
+  if (validMax !== null) {
+    sensorConfig.max = validMax;
+  }
+  if (typeof enabled === 'boolean') {
+    sensorConfig.enabled = enabled;
+  }
+  
+  // 驗證 sensor 值（必須在添加感測器字段之前）
+  if (!sensor || typeof sensor !== 'string') {
+    console.error('❌ sensor 字段無效:', sensor);
+    throw new Error(`sensor 字段無效: ${sensor}`);
+  }
+  
+  // 後端的 threshold_data 模型要求所有感測器欄位都存在
+  // 每個感測器都是 Optional[dict] 格式
   const allSensors = ['temperature','humidity','pm25','pm10','pm25_average','pm10_average','co2','tvoc'];
-  allSensors.forEach((key) => {
-    payload[key] = null;
-  });
-  // 目標感測器使用物件，其他保持為 null（後端會過濾 None）
-  payload[sensor] = {
-    ...(typeof min === 'number' ? { min } : {}),
-    ...(typeof max === 'number' ? { max } : {}),
-    ...(typeof enabled === 'boolean' ? { enabled } : {})
+  
+  // 後端期望的格式：threshold_data
+  // 所有感測器字段都是 Optional[dict]，sensor/company/lab 在頂層
+  // 注意：sensor 字段必須在頂層，不能缺少
+  const payload: Record<string, unknown> = {
+    company,
+    lab,
+    sensor, // sensor 字段必須在頂層（在感測器字段之前）
   };
+  
+  // 添加所有感測器字段（每個都是 Optional[dict]）
+  // 注意：這裡的 key 是感測器名稱（如 "temperature"），不會與頂層的 "sensor" 字段衝突
+  allSensors.forEach((key) => {
+    if (key === sensor) {
+      // 目標感測器使用配置物件（dict 格式）
+      payload[key] = Object.keys(sensorConfig).length > 0 ? sensorConfig : null;
+    } else {
+      // 其他感測器設為 null（Optional[dict] 可以是 null）
+      payload[key] = null;
+    }
+  });
+  
+  // 最終確保 sensor 字段在頂層（不會被感測器字段覆蓋，因為感測器字段名稱不同）
+  // sensor 字段存儲的是字符串（如 "temperature"），而感測器字段存儲的是 dict 或 null
+  if (!payload.sensor || payload.sensor !== sensor) {
+    payload.sensor = sensor;
+    console.warn('⚠️ 重新設置 sensor 字段:', sensor);
+  }
+  
+  // 調試輸出（開發環境）
+  if (typeof window !== 'undefined') {
+    console.debug('[setThresholds] 完整 payload:', JSON.stringify(payload, null, 2));
+    console.debug('[setThresholds] 驗證 - sensor 字段:', payload.sensor, '類型:', typeof payload.sensor);
+    console.debug('[setThresholds] 驗證 - company 字段:', payload.company);
+    console.debug('[setThresholds] 驗證 - lab 字段:', payload.lab);
+  }
+  
+  // 最終驗證：確保 sensor 字段存在
+  if (!('sensor' in payload) || !payload.sensor) {
+    console.error('❌ payload 缺少 sensor 字段！', payload);
+    throw new Error('payload 必須包含 sensor 字段');
+  }
+  
   return apiCall<{ message: string }>(`/setThresholds`, {
     method: 'POST',
     body: JSON.stringify(payload)
@@ -667,11 +1110,45 @@ export async function setThresholds(item: ThresholdUpdate): Promise<{ message: s
 export interface ManageCompanyRequest {
   company: string;
   extra_auth: boolean;
+  IP: string;
 }
 
 export async function manageCompany(payload: ManageCompanyRequest): Promise<{ message: string }> {
   return apiCall<{ message: string }>(`/manageCompany`, {
     method: 'POST',
     body: JSON.stringify(payload)
+  });
+}
+
+// 14. 獲取公司列表
+export interface CompanyInfo {
+  company: string;
+  extra_auth?: boolean;
+}
+
+// 後端目前只返回字符串陣列，需要修改後端以返回完整物件陣列
+export async function getCompany(): Promise<string[]> {
+  return apiCall<string[]>('/getCompany');
+}
+
+// 15. 刪除公司
+export interface DeleteCompanyRequest {
+  company: string;
+  extra_auth?: boolean;
+  IP?: string;
+}
+
+export async function deleteCompany(payload: DeleteCompanyRequest): Promise<{ message: string }> {
+  // 後端需要 extra_auth 和 IP 字段，即使刪除時也必須提供
+  // 使用默認值或可選參數
+  const requestPayload = {
+    company: payload.company,
+    extra_auth: payload.extra_auth ?? false,
+    IP: payload.IP ?? ''
+  };
+  
+  return apiCall<{ message: string }>('/deleteCompany', {
+    method: 'POST',
+    body: JSON.stringify(requestPayload)
   });
 }

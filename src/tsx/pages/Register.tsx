@@ -28,12 +28,14 @@ const Register: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true', // 跳過 ngrok 的瀏覽器警告頁面
         },
         body: JSON.stringify({
           account: email, // 確保字段名是 account 而不是 email
           password: password,
           func_permissions: [PERMISSIONS.VIEW_DATA, PERMISSIONS.CHANGE_PASSWORD], // 默認基本權限
-          company: company
+          company: company,
+          lab: [] // 註冊時暫時設為空陣列，後續可由管理員分配
         }),
       });
       

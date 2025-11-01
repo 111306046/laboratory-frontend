@@ -8,8 +8,10 @@ export const PERMISSIONS = {
   MODIFY_LAB: 'modify_lab',
   GET_LABS: 'get_labs',
   VIEW_DATA: 'view_data',
+  SET_THRESHOLDS: 'set_thresholds',
   CONTROL_MACHINE: 'control_machine',
-  CHANGE_PASSWORD: 'change_password'
+  CHANGE_PASSWORD: 'change_password',
+  SUPERUSER: 'superuser'
 } as const;
 
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS];
@@ -22,8 +24,10 @@ export const ALLOWED_PERMISSIONS: Permission[] = [
   'modify_lab',
   'get_labs',
   'view_data',
+  'set_thresholds',
   'control_machine',
-  'change_password'
+  'change_password',
+  'superuser'
 ] as Permission[];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -33,8 +37,10 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.MODIFY_LAB]: '修改實驗室',
   [PERMISSIONS.GET_LABS]: '查看實驗室',
   [PERMISSIONS.VIEW_DATA]: '查看數據',
+  [PERMISSIONS.SET_THRESHOLDS]: '設置警報閾值',
   [PERMISSIONS.CONTROL_MACHINE]: '控制機器',
-  [PERMISSIONS.CHANGE_PASSWORD]: '修改密碼'
+  [PERMISSIONS.CHANGE_PASSWORD]: '修改密碼',
+  [PERMISSIONS.SUPERUSER]: '超級使用者'
 };
 
 // 驗證權限是否在允許列表中
@@ -49,12 +55,30 @@ export const isValidPermission = (permission: string): boolean => {
   return ALLOWED_PERMISSIONS.includes(permission as Permission);
 };
 
-// 獲取所有允許的權限選項
-export const getPermissionOptions = () => {
-  return ALLOWED_PERMISSIONS.map(permission => ({
-    value: permission,
-    label: PERMISSION_LABELS[permission]
-  }));
+// 獲取所有允許的權限選項（排除 superuser，因為它不能手動分配）
+// 如果公司沒有 extra_auth，則排除 set_thresholds 和 allow_notify 相關權限
+export const getPermissionOptions = (companyExtraAuth?: boolean) => {
+  console.log('getPermissionOptions 被調用，companyExtraAuth:', companyExtraAuth, 'type:', typeof companyExtraAuth);
+  const result = ALLOWED_PERMISSIONS
+    .filter(permission => {
+      // 排除 superuser
+      if (permission === 'superuser') return false;
+      
+      // 如果公司明確沒有 extra_auth（嚴格等於 false），排除 set_thresholds
+      // 如果 companyExtraAuth 為 true、undefined 或其他值，則包含 set_thresholds
+      if (companyExtraAuth === false && permission === 'set_thresholds') {
+        console.log('過濾掉 set_thresholds，因為 companyExtraAuth 為 false');
+        return false;
+      }
+      
+      return true;
+    })
+    .map(permission => ({
+      value: permission,
+      label: PERMISSION_LABELS[permission]
+    }));
+  console.log('getPermissionOptions 返回的權限列表:', result.map(r => r.value));
+  return result;
 };
 
 // 測試函數 - 驗證權限系統

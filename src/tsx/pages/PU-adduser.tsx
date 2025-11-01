@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, UserPlus, Shield, Edit, Trash2, Eye, ChevronDown, Filter } from 'lucide-react';
 import { 
   getPermissionOptions, 
@@ -7,12 +7,15 @@ import {
   testPermissionSystem,
   type Permission 
 } from '../utils/permissions';
+import { getLabs, type LabInfo } from '../services/api';
 
 // 定義用戶介面 - 根據後端API結構調整
 interface User {
   account: string;
   func_permissions: Permission[];
   company: string;
+  lab?: string | string[]; // 實驗室，可以是單個字符串或字符串陣列
+  allow_notify?: boolean; // 是否允許通知
   irole?: string;
 }
 
@@ -22,6 +25,7 @@ interface NewUser {
   password: string;
   func_permissions: Permission[];
   company: string;
+  lab?: string[]; // 實驗室陣列，支援多個實驗室
   irole?: string;
 }
 
@@ -42,8 +46,13 @@ const AdminManagement = () => {
     account: '',
     password: '',
     func_permissions: [],
-    company: ''
+    company: '',
+    lab: []
   });
+
+  // 實驗室列表
+  const [labs, setLabs] = useState<LabInfo[]>([]);
+  const [loadingLabs, setLoadingLabs] = useState(false);
 
   // 角色選項
   const roleOptions = [
@@ -52,17 +61,79 @@ const AdminManagement = () => {
     { value: 'lab_manager', label: '實驗室管理員', permissions: ['modify_lab', 'get_labs', 'view_data', 'change_password'] as Permission[] }
   ];
 
-  // 權限選項（用於手動調整）
-  const permissionOptions = [
-    { value: 'view_data', label: '查看數據' },
-    { value: 'change_password', label: '修改密碼' },
-    { value: 'create_user', label: '創建用戶' },
-    { value: 'modify_user', label: '修改用戶' },
-    { value: 'get_users', label: '查看用戶列表' },
-    { value: 'modify_lab', label: '修改實驗室' },
-    { value: 'get_labs', label: '查看實驗室' },
-    { value: 'control_machine', label: '控制機器 (謹慎使用)' }
-  ];
+  // 從 localStorage 獲取公司 extra_auth 映射（在 ManageCompany 頁面更新時會保存）
+  // 每次調用都會重新讀取 localStorage，確保獲取最新值
+  const getCompanyExtraAuthMap = (): Record<string, boolean> => {
+    try {
+      const stored = localStorage.getItem('company_extra_auth_map');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  };
+
+  // 判斷公司是否有 extra_auth
+  // 優先從 localStorage 讀取，如果沒有則默認判斷（NCCU 預設沒有）
+  // 注意：每次調用都會重新讀取 localStorage，確保獲取最新的 extra_auth 狀態
+  const getCompanyExtraAuth = (companyName: string): boolean => {
+    if (!companyName) {
+      // 如果沒有公司名稱，使用當前用戶的公司
+      const currentCompany = localStorage.getItem('company') || localStorage.getItem('company_name') || '';
+      companyName = currentCompany;
+    }
+    
+    const companyKey = companyName.toUpperCase();
+    // 每次都重新讀取 localStorage，確保獲取最新值
+    const extraAuthMap = getCompanyExtraAuthMap();
+    
+    console.log('檢查公司 extra_auth:', {
+      companyName,
+      companyKey,
+      extraAuthMap,
+      hasRecord: companyKey in extraAuthMap,
+      value: companyKey in extraAuthMap ? extraAuthMap[companyKey] : undefined
+    });
+    
+    // 如果 localStorage 中有記錄，使用記錄的值
+    if (companyKey in extraAuthMap) {
+      const hasExtraAuth = extraAuthMap[companyKey];
+      console.log(`公司 ${companyKey} 的 extra_auth 狀態:`, hasExtraAuth);
+      return hasExtraAuth;
+    }
+    
+    // 否則使用默認判斷（NCCU 預設沒有 extra_auth）
+    const defaultCompaniesWithoutExtraAuth = ['NCCU'];
+    const defaultResult = !defaultCompaniesWithoutExtraAuth.includes(companyKey);
+    console.log(`公司 ${companyKey} 沒有記錄，使用默認值:`, defaultResult);
+    return defaultResult;
+  };
+  
+  // 權限選項（用於手動調整）- 根據輸入的公司動態過濾
+  // 在創建用戶時，根據 newUser.company 判斷
+  // 在編輯用戶時，根據 editingUser.company 判斷
+  const getPermissionOptionsForCompany = (companyName?: string) => {
+    const companyHasExtraAuth = getCompanyExtraAuth(companyName || '');
+    console.log('獲取權限選項:', {
+      companyName: companyName || '(空)',
+      companyHasExtraAuth,
+      allOptions: getPermissionOptions(companyHasExtraAuth)
+    });
+    const options = getPermissionOptions(companyHasExtraAuth).map(option => {
+      // 為某些權限添加額外說明
+      if (option.value === 'control_machine') {
+        return { ...option, label: '控制機器 (謹慎使用)' };
+      }
+      return option;
+    });
+    console.log('最終權限選項:', options.map(o => o.value));
+    return options;
+  };
+  
+  // 獲取創建用戶時的權限選項（根據輸入的公司動態計算）
+  // 使用 useMemo 確保當公司名稱改變時重新計算
+  const permissionOptions = useMemo(() => {
+    return getPermissionOptionsForCompany(newUser.company);
+  }, [newUser.company]);
 
   // 獲取用戶列表
   const fetchUsers = async () => {
@@ -74,6 +145,7 @@ const AdminManagement = () => {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true', // 跳過 ngrok 的瀏覽器警告頁面
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
@@ -92,9 +164,28 @@ const AdminManagement = () => {
     }
   };
 
-  // 組件加載時獲取用戶列表
+  // 獲取實驗室列表
+  const fetchLabs = async () => {
+    try {
+      setLoadingLabs(true);
+      const labsData = await getLabs();
+      setLabs(labsData);
+    } catch (err) {
+      console.error('獲取實驗室列表失敗:', err);
+    } finally {
+      setLoadingLabs(false);
+    }
+  };
+
+  // 根據公司過濾實驗室（不區分大小寫）
+  const filteredLabs = newUser.company 
+    ? labs.filter(lab => lab.company.toLowerCase() === newUser.company.toLowerCase())
+    : labs;
+
+  // 組件加載時獲取用戶列表和實驗室列表
   useEffect(() => {
     fetchUsers();
+    fetchLabs();
   }, []);
 
   // 篩選用戶
@@ -147,6 +238,7 @@ const AdminManagement = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true', // 跳過 ngrok 的瀏覽器警告頁面
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({
@@ -195,9 +287,34 @@ const AdminManagement = () => {
 
   // 新增用戶
   const handleAddUser = async () => {
-    // 基本驗證
-    if (!newUser.account || !newUser.password || !newUser.company) {
-      alert('請填寫所有必填欄位');
+    // 基本驗證，顯示具體缺失的欄位
+    const missingFields: string[] = [];
+    if (!newUser.account || newUser.account.trim() === '') {
+      missingFields.push('帳號');
+    }
+    if (!newUser.password || newUser.password.trim() === '') {
+      missingFields.push('密碼');
+    }
+    if (!newUser.company || newUser.company.trim() === '') {
+      missingFields.push('公司');
+    }
+    if (!newUser.lab || newUser.lab.length === 0) {
+      missingFields.push('實驗室');
+    }
+    
+    if (missingFields.length > 0) {
+      alert(`請填寫以下必填欄位：${missingFields.join('、')}`);
+      return;
+    }
+    
+    // 驗證所選實驗室是否屬於所選公司（不區分大小寫）
+    const invalidLabs = (newUser.lab || []).filter(labName => {
+      const lab = labs.find(l => l.name === labName);
+      return !lab || lab.company.toLowerCase() !== newUser.company.toLowerCase();
+    });
+    
+    if (invalidLabs.length > 0) {
+      alert(`所選的實驗室不屬於公司 "${newUser.company}"：${invalidLabs.join('、')}`);
       return;
     }
     
@@ -229,22 +346,50 @@ const AdminManagement = () => {
       // 確保權限數組是字符串數組
       const permissionsArray = validatedPermissions.map(p => p as string);
       
+      // 確保 lab 是有效的陣列且不為空
+      if (!newUser.lab || !Array.isArray(newUser.lab) || newUser.lab.length === 0) {
+        alert('請至少選擇一個實驗室');
+        return;
+      }
+      
+      const labArray = newUser.lab;
+      
+      // 驗證實驗室名稱對應的實驗室是否都屬於該公司
+      const labDetails = labArray.map(labName => {
+        const lab = labs.find(l => l.name === labName);
+        return lab;
+      }).filter(Boolean);
+      
+      // 最後一次驗證：確保所有實驗室都屬於該公司
+      const invalidLabs = labArray.filter(labName => {
+        const lab = labs.find(l => l.name === labName);
+        return !lab || lab.company.toLowerCase() !== newUser.company.toLowerCase();
+      });
+      
+      if (invalidLabs.length > 0) {
+        alert(`所選的實驗室不屬於公司 "${newUser.company}"：${invalidLabs.join('、')}`);
+        return;
+      }
+      
       const requestBody = {
         account: newUser.account,
         password: newUser.password,
         func_permissions: permissionsArray,
-        company: newUser.company
+        company: newUser.company,
+        lab: labArray // 發送實驗室名稱陣列
       };
       
       console.log('發送給後端的數據:', requestBody);
-      console.log('權限數組類型:', typeof validatedPermissions);
-      console.log('權限數組內容:', validatedPermissions);
+      console.log('實驗室詳情:', labDetails);
+      console.log('公司名稱:', newUser.company);
+      console.log('實驗室名稱陣列:', labArray);
       console.log('JSON字符串化後:', JSON.stringify(requestBody));
       
       const response = await fetch('/api/createUser', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true', // 跳過 ngrok 的瀏覽器警告頁面
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify(requestBody)
@@ -289,7 +434,7 @@ const AdminManagement = () => {
       }
 
       alert('用戶創建成功！');
-      setNewUser({ account: '', password: '', func_permissions: [], company: '' });
+      setNewUser({ account: '', password: '', func_permissions: [], company: '', lab: [] });
       setShowAddModal(false);
       fetchUsers(); // 重新獲取用戶列表
     } catch (err) {
@@ -310,6 +455,14 @@ const AdminManagement = () => {
   const handleEditUser = (user: User) => {
     setEditingUser({...user});
     setShowEditModal(true);
+    // 在控制台輸出當前 localStorage 中的數據
+    console.log('打開編輯用戶，檢查 localStorage:', {
+      company: user.company,
+      companyKey: user.company?.toUpperCase(),
+      localStorageMap: getCompanyExtraAuthMap(),
+      hasRecord: user.company ? user.company.toUpperCase() in getCompanyExtraAuthMap() : false,
+      extraAuthValue: user.company ? getCompanyExtraAuthMap()[user.company.toUpperCase()] : undefined
+    });
   };
 
   // 保存編輯
@@ -321,17 +474,37 @@ const AdminManagement = () => {
     
     try {
       const token = localStorage.getItem('token') || localStorage.getItem('access_token');
-      const response = await fetch('http://13.211.240.55/api/modifyPermissions', {
+      
+      // 準備請求體，確保包含所有必需字段
+      // 驗證並轉換權限為字符串數組
+      const validatedPermissions = validatePermissions(editingUser.func_permissions.map(p => p as string));
+      const permissionsArray = validatedPermissions.map(p => p as string);
+      
+      const requestBody: any = {
+        account: editingUser.account,
+        func_permissions: permissionsArray, // 確保是字符串數組
+        company: editingUser.company
+      };
+      
+      // 添加 lab 字段（如果存在）
+      if (editingUser.lab !== undefined) {
+        requestBody.lab = Array.isArray(editingUser.lab) ? editingUser.lab : [editingUser.lab];
+      } else {
+        // 如果沒有 lab，設置為空陣列
+        requestBody.lab = [];
+      }
+      
+      // 添加 allow_notify 字段（如果存在，否則默認為 false）
+      requestBody.allow_notify = editingUser.allow_notify !== undefined ? editingUser.allow_notify : false;
+      
+      const response = await fetch('https://trochanteral-noncollusive-eunice.ngrok-free.dev/api/modifyPermissions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true', // 跳過 ngrok 的瀏覽器警告頁面
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          account: editingUser.account,
-          func_permissions: editingUser.func_permissions,
-          company: editingUser.company
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -341,7 +514,22 @@ const AdminManagement = () => {
         let errorMessage = '修改用戶失敗';
         try {
           const errorData = JSON.parse(errorText);
-          errorMessage = errorData.message || errorData.detail || '修改用戶失敗';
+          // FastAPI 錯誤格式處理
+          if (errorData.detail) {
+            if (Array.isArray(errorData.detail)) {
+              // detail 是陣列格式
+              errorMessage = errorData.detail.map((e: any) => {
+                const field = e.loc?.join('.') || '未知字段';
+                return `${field}: ${e.msg}`;
+              }).join(', ');
+            } else if (typeof errorData.detail === 'string') {
+              errorMessage = errorData.detail;
+            } else {
+              errorMessage = JSON.stringify(errorData.detail);
+            }
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          }
         } catch (e) {
           errorMessage = `修改用戶失敗 (${response.status})`;
         }
@@ -354,7 +542,8 @@ const AdminManagement = () => {
       setEditingUser(null);
       fetchUsers(); // 重新獲取用戶列表
     } catch (err) {
-      alert(err instanceof Error ? err.message : '修改用戶失敗');
+      const errorMsg = err instanceof Error ? err.message : '修改用戶失敗';
+      alert(errorMsg);
       console.error('修改用戶失敗:', err);
     }
   };
@@ -614,8 +803,70 @@ const AdminManagement = () => {
                     placeholder="請輸入公司名稱"
                     className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={newUser.company}
-                    onChange={(e) => setNewUser({...newUser, company: e.target.value})}
+                    onChange={(e) => {
+                      const company = e.target.value;
+                      // 當公司改變時，清空已選的實驗室（因為可能不屬於新公司）
+                      const currentLabs = newUser.lab || [];
+                      const validLabs = currentLabs.filter(labName => {
+                        const lab = labs.find(l => l.name === labName);
+                        return lab && lab.company.toLowerCase() === company.toLowerCase();
+                      });
+                      setNewUser({
+                        ...newUser,
+                        company: company,
+                        lab: validLabs // 只保留屬於新公司的實驗室
+                      });
+                    }}
                   />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    實驗室 <span className="text-red-500">*</span>
+                  </label>
+                  {loadingLabs ? (
+                    <div className="text-sm text-gray-500">載入實驗室列表中...</div>
+                  ) : (
+                    <div className="border border-gray-300 rounded px-3 py-2 max-h-32 overflow-y-auto">
+                      {filteredLabs.length === 0 ? (
+                        <div className="text-sm text-gray-500">
+                          {newUser.company ? `該公司暫無可用實驗室` : '請先輸入公司名稱'}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {filteredLabs.map((lab) => (
+                            <label key={lab.id} className="flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={newUser.lab?.includes(lab.name) || false}
+                                onChange={(e) => {
+                                  const currentLabs = newUser.lab || [];
+                                  if (e.target.checked) {
+                                    setNewUser({
+                                      ...newUser,
+                                      lab: [...currentLabs, lab.name]
+                                    });
+                                  } else {
+                                    setNewUser({
+                                      ...newUser,
+                                      lab: currentLabs.filter(l => l !== lab.name)
+                                    });
+                                  }
+                                }}
+                                className="mr-2"
+                              />
+                              <span className="text-sm">{lab.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {newUser.lab && newUser.lab.length > 0 && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      已選擇: {newUser.lab.join(', ')}
+                    </div>
+                  )}
                 </div>
                 
                 <div>
@@ -721,8 +972,98 @@ const AdminManagement = () => {
               placeholder="請輸入公司名稱"
               className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={editingUser.company}
-              onChange={(e) => setEditingUser({...editingUser, company: e.target.value})}
+              onChange={(e) => {
+                const company = e.target.value;
+                // 當公司改變時，清空已選的實驗室（因為可能不屬於新公司）
+                const currentLabs = editingUser.lab ? (Array.isArray(editingUser.lab) ? editingUser.lab : [editingUser.lab]) : [];
+                const validLabs = currentLabs.filter(labName => {
+                  const lab = labs.find(l => l.name === labName);
+                  return lab && lab.company.toLowerCase() === company.toLowerCase();
+                });
+                setEditingUser({
+                  ...editingUser,
+                  company: company,
+                  lab: validLabs.length > 0 ? validLabs : []
+                });
+              }}
             />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              實驗室 <span className="text-red-500">*</span>
+            </label>
+            {loadingLabs ? (
+              <div className="text-sm text-gray-500">載入實驗室列表中...</div>
+            ) : (
+              <div className="border border-gray-300 rounded px-3 py-2 max-h-32 overflow-y-auto">
+                {(() => {
+                  // 過濾出屬於當前公司的實驗室
+                  const companyLabs = labs.filter(lab => 
+                    lab.company.toLowerCase() === (editingUser.company || '').toLowerCase()
+                  );
+                  
+                  if (companyLabs.length === 0) {
+                    return (
+                      <div className="text-sm text-gray-500">
+                        {editingUser.company ? `該公司暫無可用實驗室` : '請先輸入公司名稱'}
+                      </div>
+                    );
+                  }
+                  
+                  const currentLabs = editingUser.lab ? (Array.isArray(editingUser.lab) ? editingUser.lab : [editingUser.lab]) : [];
+                  
+                  return (
+                    <div className="space-y-2">
+                      {companyLabs.map((lab) => (
+                        <label key={lab.id} className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={currentLabs.includes(lab.name)}
+                            onChange={(e) => {
+                              const labsArray = currentLabs;
+                              if (e.target.checked) {
+                                setEditingUser({
+                                  ...editingUser,
+                                  lab: [...labsArray, lab.name]
+                                });
+                              } else {
+                                setEditingUser({
+                                  ...editingUser,
+                                  lab: labsArray.filter(l => l !== lab.name)
+                                });
+                              }
+                            }}
+                            className="mr-2"
+                          />
+                          <span className="text-sm">{lab.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+            {editingUser.lab && (Array.isArray(editingUser.lab) ? editingUser.lab : [editingUser.lab]).length > 0 && (
+              <div className="mt-1 text-xs text-gray-500">
+                已選擇: {(Array.isArray(editingUser.lab) ? editingUser.lab : [editingUser.lab]).join(', ')}
+              </div>
+            )}
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              允許通知
+            </label>
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={editingUser.allow_notify || false}
+                onChange={(e) => setEditingUser({...editingUser, allow_notify: e.target.checked})}
+                className="mr-2"
+              />
+              <span className="text-sm text-gray-700">啟用通知功能</span>
+            </label>
           </div>
           
           <div>
@@ -756,7 +1097,7 @@ const AdminManagement = () => {
               權限 (根據角色自動分配，可手動調整)
             </label>
             <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-              {permissionOptions.map(option => (
+              {getPermissionOptionsForCompany(editingUser.company || '').map(option => (
                 <label key={option.value} className="flex items-center">
                   <input
                     type="checkbox"

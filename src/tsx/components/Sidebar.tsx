@@ -86,6 +86,10 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       const isSuper = localStorage.getItem('is_superuser') === 'true' || userInfo.user_id === 'yezyez' || userInfo.permissions.includes('superuser');
       return isSuper;
     }
+    // 特殊處理：警報設置允許 view_alerts 或 modify_lab 權限
+    if (permission === 'view_alerts') {
+      return userInfo.permissions.includes('view_alerts') || userInfo.permissions.includes('modify_lab');
+    }
     return userInfo.permissions.includes(permission);
   };
 
@@ -94,7 +98,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     const allNavItems: NavItem[] = [
       { title: '首頁', path: '/dashboard', icon: <FiHome size={20} />, requiredPermission: 'none' }, // 所有人都可以訪問
       { title: '數據記錄', path: '/data-records', icon: <FiDatabase size={20} />, requiredPermission: 'view_data' },
-      { title: '警報設置', path: '/alert', icon: <FiAlertCircle size={20} />, requiredPermission: 'view_alerts' },
+      { title: '警報設置', path: '/alert', icon: <FiAlertCircle size={20} />, requiredPermission: 'view_alerts' }, // 允許 view_alerts 或 modify_lab
       { title: '統計圖表', path: '/static-chart', icon: <FiBarChart2 size={20} />, requiredPermission: 'view_statistics' },
       { title: '用戶管理', path: '/PU-addusers', icon: <FiUser size={20} />, requiredPermission: 'get_users' },
       { title: '實驗室管理', path: '/PU-laboratarymnagement', icon: <FiSettings size={20} />, requiredPermission: 'get_labs' },

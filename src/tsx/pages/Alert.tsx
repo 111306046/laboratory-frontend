@@ -105,11 +105,8 @@ const Alert = () => {
         return;
       }
       
-      console.log('🔍 開始獲取用戶 lab 信息，帳號:', userAccount);
-      
       // 獲取所有實驗室列表
       const labs = await getLabs();
-      console.log('📋 獲取到的實驗室列表:', labs);
       
       // 查找包含該用戶的實驗室
       // 後端的 lab 數據結構中應該有 users 或 accounts 字段來存儲用戶列表
@@ -125,19 +122,16 @@ const Alert = () => {
         if (labData.users && Array.isArray(labData.users)) {
           if (labData.users.includes(userAccount)) {
             foundLab = lab.name;
-            console.log('✅ 在實驗室中找到用戶:', lab.name, '用戶列表:', labData.users);
             break;
           }
         } else if (labData.accounts && Array.isArray(labData.accounts)) {
           if (labData.accounts.includes(userAccount)) {
             foundLab = lab.name;
-            console.log('✅ 在實驗室中找到用戶:', lab.name, '帳號列表:', labData.accounts);
             break;
           }
         } else if (labData.user_accounts && Array.isArray(labData.user_accounts)) {
           if (labData.user_accounts.includes(userAccount)) {
             foundLab = lab.name;
-            console.log('✅ 在實驗室中找到用戶:', lab.name, '帳號列表:', labData.user_accounts);
             break;
           }
         }
@@ -146,7 +140,6 @@ const Alert = () => {
       if (foundLab) {
         // 直接使用後端返回的實驗室名稱，不做任何轉換
         setUserLab(foundLab);
-        console.log('✅ 從實驗室數據中找到用戶 lab:', foundLab, '帳號:', userAccount);
       } else {
         console.warn('⚠️ 在所有實驗室中找不到該用戶，帳號:', userAccount);
         console.warn('  實驗室列表:', labs.map(l => ({ name: l.name, company: l.company })));
@@ -179,7 +172,6 @@ const Alert = () => {
   const getUserLab = (): string => {
     // 首先使用從 API 獲取的 lab
     if (userLab) {
-      console.log('使用從 API 獲取的 lab:', userLab);
       return userLab;
     }
     
@@ -189,10 +181,8 @@ const Alert = () => {
       if (userLabStr) {
         const parsedLab = JSON.parse(userLabStr);
         if (Array.isArray(parsedLab) && parsedLab.length > 0) {
-          console.log('使用 localStorage 中的 user_lab (數組):', parsedLab[0]);
           return parsedLab[0];
         } else if (typeof parsedLab === 'string' && parsedLab) {
-          console.log('使用 localStorage 中的 user_lab (字符串):', parsedLab);
           return parsedLab;
         }
       }
@@ -230,7 +220,6 @@ const Alert = () => {
         return;
       }
       
-      console.log('載入警報設定 - company:', company, 'lab:', lab);
       // 後端對 getThresholds 可能要求 sensor，這裡以所有感測器清單並行請求
       const sensors = ['temperature', 'humidity', 'co2', 'pm25', 'pm10', 'pm25_average', 'pm10_average', 'tvoc'];
       const fetched = await Promise.all(
@@ -353,7 +342,6 @@ const Alert = () => {
       if (!updated) return;
       const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
       const lab = getUserLab();
-      console.log('更新警報 - company:', company, 'lab:', lab, 'sensor:', updated.parameter);
       await setThresholds({ company, lab, sensor: updated.parameter, min: updated.minValue, max: updated.maxValue, enabled: updated.enabled });
     } catch (error: any) {
       console.error('更新警報失敗:', error);

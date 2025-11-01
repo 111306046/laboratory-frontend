@@ -114,12 +114,6 @@ const ManageCompany: React.FC = () => {
         const companyKey = company.toUpperCase();
         extraAuthMap[companyKey] = extraAuth;
         localStorage.setItem('company_extra_auth_map', JSON.stringify(extraAuthMap));
-        console.log('已保存公司 extra_auth 狀態:', {
-          company,
-          companyKey,
-          extraAuth,
-          fullMap: extraAuthMap
-        });
       } catch (error) {
         console.error('保存公司 extra_auth 狀態失敗:', error);
       }

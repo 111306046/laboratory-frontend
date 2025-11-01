@@ -33,20 +33,6 @@ const Login: React.FC = () => {
       // 保存 refresh_token（如果後端提供）
       if (data.refresh_token) {
         localStorage.setItem('refresh_token', data.refresh_token);
-        console.log('✅ 已保存 refresh_token，可用於自動刷新 access_token');
-        // 調試：檢查 refresh_token 格式
-        if (data.refresh_token.includes('.')) {
-          try {
-            const parts = data.refresh_token.split('.');
-            if (parts.length === 3) {
-              const payload = JSON.parse(atob(parts[1]));
-              console.log('  - refresh_token 格式: JWT');
-              console.log('  - 包含 account:', payload.account || '未知');
-            }
-          } catch (e) {
-            console.log('  - refresh_token 格式: 非標準 JWT');
-          }
-        }
       } else {
         console.warn('⚠️ 後端未返回 refresh_token，無法使用自動刷新功能');
         console.warn('  請確認後端登入 API 返回了 refresh_token 欄位');
@@ -106,11 +92,9 @@ const Login: React.FC = () => {
         const userLab = (data as any).lab;
         // lab 可能是字符串或數組
         localStorage.setItem('user_lab', JSON.stringify(userLab));
-        console.log('✅ 已保存用戶 lab 信息:', userLab);
       } else if (data.company_lab) {
         // 如果沒有 lab，使用 company_lab
         localStorage.setItem('user_lab', JSON.stringify(data.company_lab));
-        console.log('✅ 使用 company_lab 作為 user_lab:', data.company_lab);
       }
 
       // 若登入回傳沒有包含權限，不再呼叫 /getUsers（避免 401），改給最小集

@@ -4,7 +4,6 @@ import {
   getPermissionOptions, 
   validatePermissions, 
   isValidPermission,
-  testPermissionSystem,
   type Permission 
 } from '../utils/permissions';
 import { getLabs, type LabInfo } from '../services/api';
@@ -97,14 +96,12 @@ const AdminManagement = () => {
     // 如果 localStorage 中有記錄，使用記錄的值
     if (companyKey in extraAuthMap) {
       const hasExtraAuth = extraAuthMap[companyKey];
-      console.log(`公司 ${companyKey} 的 extra_auth 狀態:`, hasExtraAuth);
       return hasExtraAuth;
     }
     
     // 否則使用默認判斷（NCCU 預設沒有 extra_auth）
     const defaultCompaniesWithoutExtraAuth = ['NCCU'];
     const defaultResult = !defaultCompaniesWithoutExtraAuth.includes(companyKey);
-    console.log(`公司 ${companyKey} 沒有記錄，使用默認值:`, defaultResult);
     return defaultResult;
   };
   
@@ -113,11 +110,6 @@ const AdminManagement = () => {
   // 在編輯用戶時，根據 editingUser.company 判斷
   const getPermissionOptionsForCompany = (companyName?: string) => {
     const companyHasExtraAuth = getCompanyExtraAuth(companyName || '');
-    console.log('獲取權限選項:', {
-      companyName: companyName || '(空)',
-      companyHasExtraAuth,
-      allOptions: getPermissionOptions(companyHasExtraAuth)
-    });
     const options = getPermissionOptions(companyHasExtraAuth).map(option => {
       // 為某些權限添加額外說明
       if (option.value === 'control_machine') {
@@ -125,7 +117,6 @@ const AdminManagement = () => {
       }
       return option;
     });
-    console.log('最終權限選項:', options.map(o => o.value));
     return options;
   };
   
@@ -322,8 +313,6 @@ const AdminManagement = () => {
       // 驗證新用戶的權限
       const validatedPermissions = validatePermissions(newUser.func_permissions.map(p => p as string));
       
-      console.log('原始權限:', newUser.func_permissions);
-      console.log('驗證後權限:', validatedPermissions);
       
       // 檢查是否為空權限
       if (validatedPermissions.length === 0) {
@@ -332,10 +321,6 @@ const AdminManagement = () => {
       }
       
       // 檢查權限組合是否合理
-      console.log('權限組合檢查:');
-      console.log('- 包含管理權限:', validatedPermissions.includes('create_user') || validatedPermissions.includes('modify_user'));
-      console.log('- 包含查看權限:', validatedPermissions.includes('view_data'));
-      console.log('- 包含基本權限:', validatedPermissions.includes('change_password'));
       
       if (validatedPermissions.length !== newUser.func_permissions.length) {
         const invalidPermissions = newUser.func_permissions.filter(p => !isValidPermission(p as string));
@@ -379,11 +364,6 @@ const AdminManagement = () => {
         lab: labArray // 發送實驗室名稱陣列
       };
       
-      console.log('發送給後端的數據:', requestBody);
-      console.log('實驗室詳情:', labDetails);
-      console.log('公司名稱:', newUser.company);
-      console.log('實驗室名稱陣列:', labArray);
-      console.log('JSON字符串化後:', JSON.stringify(requestBody));
       
       const response = await fetch('/api/createUser', {
         method: 'POST',
@@ -395,8 +375,6 @@ const AdminManagement = () => {
         body: JSON.stringify(requestBody)
       });
 
-      console.log('響應狀態:', response.status);
-      console.log('響應頭:', response.headers);
 
       if (!response.ok) {
         let errorMessage = '創建用戶失敗';
@@ -405,7 +383,6 @@ const AdminManagement = () => {
         try {
           // 嘗試讀取響應文本
           const responseText = await response.text();
-          console.log('響應文本:', responseText);
           
           // 檢查是否是HTML錯誤頁面
           if (responseText.includes('Internal Server Error') || responseText.includes('<html>')) {
@@ -418,7 +395,6 @@ const AdminManagement = () => {
               errorMessage = errorData.message || errorMessage;
               errorDetails = errorData.details || '';
             } catch (jsonError) {
-              console.log('響應不是JSON格式，使用原始文本');
               errorMessage = responseText || errorMessage;
             }
           }

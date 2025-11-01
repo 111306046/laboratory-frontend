@@ -58,7 +58,6 @@ export const isValidPermission = (permission: string): boolean => {
 // 獲取所有允許的權限選項（排除 superuser，因為它不能手動分配）
 // 如果公司沒有 extra_auth，則排除 set_thresholds 和 allow_notify 相關權限
 export const getPermissionOptions = (companyExtraAuth?: boolean) => {
-  console.log('getPermissionOptions 被調用，companyExtraAuth:', companyExtraAuth, 'type:', typeof companyExtraAuth);
   const result = ALLOWED_PERMISSIONS
     .filter(permission => {
       // 排除 superuser
@@ -67,7 +66,6 @@ export const getPermissionOptions = (companyExtraAuth?: boolean) => {
       // 如果公司明確沒有 extra_auth（嚴格等於 false），排除 set_thresholds
       // 如果 companyExtraAuth 為 true、undefined 或其他值，則包含 set_thresholds
       if (companyExtraAuth === false && permission === 'set_thresholds') {
-        console.log('過濾掉 set_thresholds，因為 companyExtraAuth 為 false');
         return false;
       }
       
@@ -77,27 +75,7 @@ export const getPermissionOptions = (companyExtraAuth?: boolean) => {
       value: permission,
       label: PERMISSION_LABELS[permission]
     }));
-  console.log('getPermissionOptions 返回的權限列表:', result.map(r => r.value));
   return result;
-};
-
-// 測試函數 - 驗證權限系統
-export const testPermissionSystem = () => {
-  console.log('=== 權限系統測試 ===');
-  console.log('允許的權限:', ALLOWED_PERMISSIONS);
-  
-  // 測試有效權限
-  const validPermissions = ['create_user', 'view_data', 'change_password'];
-  console.log('有效權限測試:', validPermissions);
-  console.log('驗證結果:', validatePermissions(validPermissions));
-  
-  // 測試無效權限
-  const invalidPermissions = ['create_user', 'invalid_permission', 'view_data'];
-  console.log('無效權限測試:', invalidPermissions);
-  console.log('驗證結果:', validatePermissions(invalidPermissions));
-  
-  // 測試權限選項
-  console.log('權限選項:', getPermissionOptions());
 }; 
 
 // 權限判斷工具

@@ -125,7 +125,6 @@ async function refreshAccessToken(): Promise<string | null> {
   isRefreshing = true;
   refreshPromise = (async () => {
     try {
-      console.log('🔄 開始刷新 access_token...');
       const response = await fetch(`${API_BASE_URL}/refresh`, {
         method: 'POST',
         headers: {
@@ -236,7 +235,6 @@ async function refreshAccessToken(): Promise<string | null> {
       localStorage.setItem('token', data.access_token);
       localStorage.setItem('refresh_token', data.refresh_token);
       
-      console.log('✅ 成功刷新 access_token');
       return data.access_token;
     } catch (error) {
       // 區分不同類型的錯誤
@@ -284,7 +282,6 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   // 如果是 401 錯誤且不是刷新請求，嘗試自動刷新 token
   if (response.status === 401 && !isRefreshEndpoint) {
-    console.log('收到 401 錯誤，嘗試刷新 token...');
     const newToken = await refreshAccessToken();
     
     if (newToken) {
@@ -398,13 +395,6 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   // 檢查響應內容類型
   const contentType = response.headers.get('content-type');
-  if (typeof window !== 'undefined') {
-    // eslint-disable-next-line no-console
-    console.debug('[apiCall] url, content-type', {
-      url: `${API_BASE_URL}${endpoint}`,
-      contentType
-    });
-  }
   
   if (contentType && contentType.includes('application/xml')) {
     // 處理 XML 響應
@@ -553,18 +543,6 @@ export async function searchData(params: SearchDataParams): Promise<SensorData[]
     queryParts.push('format=json');
   }
   const query = queryParts.join('&');
-  // 除錯輸出：觀察實際查詢參數（可於生產環境移除）
-  if (typeof window !== 'undefined') {
-    // eslint-disable-next-line no-console
-    console.debug('[searchData] query', {
-      company_lab: params.company_lab,
-      machine: params.machine,
-      start: params.start,
-      end: params.end,
-      format: params.format ?? 'json',
-      url: `${API_BASE_URL}/searchData?${query}`
-    });
-  }
   
   const result = await apiCall<RawSensorData[] | ExcelResponse>(`/searchData?${query}`);
   
@@ -743,12 +721,10 @@ export class WebSocketService {
     if (sensor) {
       wsUrl += `&sensor=${encodeURIComponent(sensor)}`;
     }
-    console.log('嘗試連接 WebSocket:', wsUrl.replace(token, 'TOKEN_HIDDEN'));
 
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
-      console.log('WebSocket 連接成功');
       this.reconnectAttempts = 0;
       this.emit('connected');
     };
@@ -763,10 +739,6 @@ export class WebSocketService {
           return;
         }
         
-        // 記錄原始數據以便調試（僅在開發模式下）
-        if (import.meta.env.DEV) {
-          console.log('WebSocket 原始數據:', data);
-        }
         
         this.emit('data', data);
       } catch (error) {
@@ -777,15 +749,12 @@ export class WebSocketService {
     };
 
     this.ws.onclose = async (event) => {
-      console.log('WebSocket 連接關閉:', event.code, event.reason);
-      console.log('關閉代碼說明:', this.getCloseCodeDescription(event.code));
       this.emit('disconnected', event);
       
       
       // 自動重連
       if (this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
-        console.log(`嘗試重連 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
         
         // 重連前嘗試獲取最新的 token（可能已刷新）
         const currentToken = localStorage.getItem('token') || token;
@@ -1083,16 +1052,8 @@ export async function setThresholds(item: ThresholdUpdate): Promise<{ message: s
   // sensor 字段存儲的是字符串（如 "temperature"），而感測器字段存儲的是 dict 或 null
   if (!payload.sensor || payload.sensor !== sensor) {
     payload.sensor = sensor;
-    console.warn('⚠️ 重新設置 sensor 字段:', sensor);
   }
   
-  // 調試輸出（開發環境）
-  if (typeof window !== 'undefined') {
-    console.debug('[setThresholds] 完整 payload:', JSON.stringify(payload, null, 2));
-    console.debug('[setThresholds] 驗證 - sensor 字段:', payload.sensor, '類型:', typeof payload.sensor);
-    console.debug('[setThresholds] 驗證 - company 字段:', payload.company);
-    console.debug('[setThresholds] 驗證 - lab 字段:', payload.lab);
-  }
   
   // 最終驗證：確保 sensor 字段存在
   if (!('sensor' in payload) || !payload.sensor) {

@@ -101,7 +101,6 @@ const Alert = () => {
     try {
       const userAccount = localStorage.getItem('user_account');
       if (!userAccount) {
-        console.warn('未找到用戶帳號，無法獲取 lab 信息');
         return;
       }
       
@@ -141,10 +140,6 @@ const Alert = () => {
         // 直接使用後端返回的實驗室名稱，不做任何轉換
         setUserLab(foundLab);
       } else {
-        console.warn('⚠️ 在所有實驗室中找不到該用戶，帳號:', userAccount);
-        console.warn('  實驗室列表:', labs.map(l => ({ name: l.name, company: l.company })));
-        console.warn('  請確認後端 lab 數據中是否包含 users/accounts/user_accounts 字段');
-        
         // 如果找不到，嘗試使用 localStorage 中的值作為後備
         const fallbackLab = localStorage.getItem('user_lab') || localStorage.getItem('company_lab');
         if (fallbackLab) {
@@ -152,12 +147,10 @@ const Alert = () => {
             const parsed = JSON.parse(fallbackLab);
             const labValue = Array.isArray(parsed) ? parsed[0] : parsed;
             if (labValue && typeof labValue === 'string') {
-              console.warn('⚠️ 使用 localStorage 中的後備值:', labValue);
               setUserLab(labValue);
             }
           } catch {
             if (typeof fallbackLab === 'string') {
-              console.warn('⚠️ 使用 localStorage 中的後備值:', fallbackLab);
               setUserLab(fallbackLab);
             }
           }
@@ -187,13 +180,12 @@ const Alert = () => {
         }
       }
     } catch (e) {
-      console.warn('無法解析 user_lab:', e);
+      // 忽略解析錯誤
     }
     
     // 再次嘗試從 company_lab 獲取
     const companyLab = localStorage.getItem('company_lab');
     if (companyLab) {
-      console.warn('⚠️ 使用 company_lab 作為後備:', companyLab);
       return companyLab;
     }
     
@@ -215,7 +207,6 @@ const Alert = () => {
       const lab = getUserLab();
       
       if (!lab) {
-        console.warn('⚠️ 無法獲取 lab 信息，無法載入警報設定');
         setAlerts([]); // 顯示空狀態
         return;
       }
@@ -481,7 +472,6 @@ const Alert = () => {
         });
       } catch (e) {
         // 若本地 mock 不存在，視為成功（純前端 demo）
-        console.warn('Mock /alerts/notify 不存在，已模擬成功');
       }
 
       setShowSaveModal(true);

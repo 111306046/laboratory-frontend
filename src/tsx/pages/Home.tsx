@@ -12,11 +12,6 @@ interface LabData {
   temperature: number;
   tvoc: number;
 }
-
-// 移除未使用的 Sensor 介面
-
-// 移除未使用的 Laboratory 介面
-
 const Home: React.FC = () => {
   // 彙總所有實驗室感測器的平均值
   const [labData, setLabData] = useState<LabData>({
@@ -48,9 +43,9 @@ const Home: React.FC = () => {
         setIsLoading(true);
         setError('');
         
-        // 獲取最近的數據（使用正確格式的 lab：公司名大寫 + _lab）
+        // 獲取最近的數據（使用公司名稱的原始格式）
         const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
-        const companyLab = localStorage.getItem('company_lab') || `${company.toUpperCase()}_lab`;
+        const companyLab = localStorage.getItem('company_lab') || `${company.replace(/\s+/g, '_')}_lab`;
         const recentData = await getRecentData({
           company_lab: companyLab,
           machine: 'aq',
@@ -94,25 +89,21 @@ const Home: React.FC = () => {
 
     // 設置 WebSocket 連接
     const setupWebSocket = () => {
-      // 獲取公司名稱並生成正確的 lab 格式（公司名大寫 + _lab）
+      // 獲取公司名稱（保持原始格式，不大寫轉換）
       const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
       let companyLab = localStorage.getItem('company_lab');
       
-      // 確保 lab 格式使用大寫公司名（例如：NCCU_lab，不是 nccu_lab）
+      // 如果沒有 company_lab，根據公司名稱生成（保持公司名稱的原始格式）
       if (!companyLab) {
-        companyLab = `${company.toUpperCase()}_lab`;
-      } else {
-        // 如果 localStorage 中的 company_lab 可能是小寫，確保轉換為大寫格式
-        const companyUpper = company.toUpperCase();
-        // 移除可能的 _lab 後綴，然後重新組合為大寫格式
-        const labNameWithoutSuffix = companyLab.replace(/_lab$/i, '');
-        companyLab = `${companyUpper}_lab`;
+        // 使用公司名稱的原始格式 + _lab（不強制大寫）
+        companyLab = `${company.replace(/\s+/g, '_')}_lab`;
       }
+      // 如果已有 company_lab，直接使用（保持後端返回的格式）
       
       const sensor = 'aq'; // 感測器名稱
       const currentToken = localStorage.getItem('token') || token;
       
-      // 確保使用最新的 token 和正確格式的 lab（大寫公司名 + _lab）
+      // 使用實際的公司名稱格式（可能是大寫或小寫，取決於後端返回的值）
       wsService.connect(currentToken, companyLab, sensor);
       
       wsService.on('connected', () => {
@@ -125,6 +116,11 @@ const Home: React.FC = () => {
       });
       
       wsService.on('data', (data: any) => {
+        // 調試：記錄接收到的原始數據
+        if (import.meta.env.DEV) {
+          console.log('WebSocket 收到數據:', data);
+        }
+
         // 安全地轉換數值，避免 NaN
         const toNumber = (value: any, defaultValue: number = 0): number => {
           if (value === null || value === undefined || value === '') {
@@ -137,24 +133,39 @@ const Home: React.FC = () => {
         // 數據可能在 values 對象中（WebSocket 格式），也可能直接在頂層（API 格式）
         const values = data.values || data;
         
-        // 更新即時數據，使用安全的數值轉換
-        // 將現有數據映射到對應字段
-        setLabData({
-            co2: Math.round(toNumber(values.co2, 0)),
-            humidity: Math.round(toNumber(values.humidity, 0) * 10) / 10, // 保留一位小數
-            pm10: Math.round(toNumber(values.pm10, 0)),
-            pm10_average: Math.round(toNumber(values.pm10_average, 0)),
-            pm25: Math.round(toNumber(values.pm25, 0)),
-            pm25_average: Math.round(toNumber(values.pm25_average, 0)),
-            temperature: Math.round(toNumber(values.temperature || values.temperatu, 0) * 10) / 10, // 保留一位小數
-            tvoc: Math.round(toNumber(values.tvoc, 0) * 1000) / 1000 // 保留三位小數
+        if (import.meta.env.DEV) {
+          console.log('解析後的 values:', values);
+          console.log('數據字段:', {
+            co2: values.co2,
+            humidity: values.humidity,
+            pm10: values.pm10,
+            pm10_average: values.pm10_average,
+            pm25: values.pm25,
+            pm25_average: values.pm25_average,
+            temperature: values.temperature || values.temperatu,
+            tvoc: values.tvoc
           });
+        }
+        
+        // 更新即時數據，使用安全的數值轉換
+        const newLabData = {
+          co2: Math.round(toNumber(values.co2, 0)),
+          humidity: Math.round(toNumber(values.humidity, 0) * 10) / 10, // 保留一位小數
+          pm10: Math.round(toNumber(values.pm10, 0)),
+          pm10_average: Math.round(toNumber(values.pm10_average, 0)),
+          pm25: Math.round(toNumber(values.pm25, 0)),
+          pm25_average: Math.round(toNumber(values.pm25_average, 0)),
+          temperature: Math.round(toNumber(values.temperature || values.temperatu, 0) * 10) / 10, // 保留一位小數
+          tvoc: Math.round(toNumber(values.tvoc, 0) * 1000) / 1000 // 保留三位小數
+        };
+        
+        if (import.meta.env.DEV) {
+          console.log('更新後的 labData:', newLabData);
+        }
+        
+        setLabData(newLabData);
         setLastUpdate(new Date());
         setError(''); // 接收到數據時清除錯誤
-        
-        // 調試：記錄接收到的數據（僅在開發模式下）
-        if (import.meta.env.DEV) {
-        }
       });
       
       wsService.on('error', (error: any) => {

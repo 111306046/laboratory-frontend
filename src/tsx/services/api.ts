@@ -699,10 +699,23 @@ export class WebSocketService {
   private reconnectInterval = 3000;
   private listeners: Map<string, Function[]> = new Map();
   private lastSensor?: string; // 儲存最後使用的 sensor 參數
+  private lastCompanyLab?: string; // 儲存最後使用的 companyLab
+  private lastToken?: string; // 儲存最後使用的 token
 
   connect(token: string, companyLab: string = 'nccu_lab', sensor?: string): void {
+    // 儲存參數以便重連時使用
+    this.lastToken = token;
+    this.lastCompanyLab = companyLab;
+    if (sensor) {
+      this.lastSensor = sensor;
+    }
+
+    // 如果已有連接且狀態為 OPEN，且參數相同，則不重新連接
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      return;
+      // 檢查參數是否相同，如果相同則不需要重連
+      if (this.lastCompanyLab === companyLab && this.lastSensor === sensor) {
+        return;
+      }
     }
 
     // 如果已有連接，先關閉
@@ -711,18 +724,36 @@ export class WebSocketService {
       this.ws = null;
     }
 
-    // 儲存參數以便重連時使用
-    if (sensor) {
-      this.lastSensor = sensor;
-    }
+    // 對 companyLab 進行處理（確保格式正確，但保留原有的下划線和大小寫）
+    // 只移除空格和其他無效字符，保留下划線、字母、數字、連字符
+    const safeCompanyLab = companyLab.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '');
 
-    // 構建 WebSocket URL，包含 token 和可選的 sensor 參數
-    let wsUrl = `${WS_BASE_URL}/${companyLab}?token=${encodeURIComponent(token)}`;
+    // 構建 WebSocket URL
+    // 注意：WebSocket URL 的路徑部分不需要 encodeURIComponent，只有查詢參數需要
+    let wsUrl = `${WS_BASE_URL}/${safeCompanyLab}?token=${encodeURIComponent(token)}`;
     if (sensor) {
       wsUrl += `&sensor=${encodeURIComponent(sensor)}`;
     }
 
-    this.ws = new WebSocket(wsUrl);
+    // 調試：記錄連接信息
+    if (import.meta.env.DEV) {
+      console.log('WebSocket 連接信息:', {
+        companyLab: companyLab,
+        safeCompanyLab: safeCompanyLab,
+        sensor: sensor,
+        tokenLength: token.length,
+        url: wsUrl.replace(token, 'TOKEN_HIDDEN'),
+        tokenPreview: token.substring(0, 20) + '...'
+      });
+    }
+
+    try {
+      this.ws = new WebSocket(wsUrl);
+    } catch (error) {
+      console.error('創建 WebSocket 連接失敗:', error);
+      this.emit('error', error);
+      return;
+    }
 
     this.ws.onopen = () => {
       this.reconnectAttempts = 0;
@@ -731,14 +762,24 @@ export class WebSocketService {
 
     this.ws.onmessage = (event) => {
       try {
+        // 調試：記錄原始接收到的數據
+        if (import.meta.env.DEV) {
+          console.log('WebSocket 原始數據:', event.data);
+        }
+        
         const data = JSON.parse(event.data);
+        
+        if (import.meta.env.DEV) {
+          console.log('WebSocket 解析後的數據:', data);
+        }
         
         // 驗證數據格式，確保必要字段存在
         if (!data || typeof data !== 'object') {
-          console.warn('WebSocket 收到無效數據格式:', data);
+          if (import.meta.env.DEV) {
+            console.warn('WebSocket 數據格式無效:', data);
+          }
           return;
         }
-        
         
         this.emit('data', data);
       } catch (error) {
@@ -749,36 +790,66 @@ export class WebSocketService {
     };
 
     this.ws.onclose = async (event) => {
+      // 調試：記錄關閉信息
+      if (import.meta.env.DEV) {
+        console.log('WebSocket 關閉:', {
+          code: event.code,
+          reason: event.reason || '無原因',
+          wasClean: event.wasClean,
+          closeCodeText: this.getCloseCodeDescription(event.code)
+        });
+      }
+      
       this.emit('disconnected', event);
       
-      
-      // 自動重連
-      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      // 自動重連（只有在異常關閉時才重連，正常關閉不重連）
+      if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
         
+        if (import.meta.env.DEV) {
+          console.log(`WebSocket 嘗試重連 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+        }
+        
         // 重連前嘗試獲取最新的 token（可能已刷新）
-        const currentToken = localStorage.getItem('token') || token;
+        const currentToken = localStorage.getItem('token') || this.lastToken || token;
+        const currentCompanyLab = this.lastCompanyLab || companyLab;
+        const currentSensor = this.lastSensor;
         
         setTimeout(() => {
-          this.connect(currentToken, companyLab, this.lastSensor);
+          this.connect(currentToken, currentCompanyLab, currentSensor);
         }, this.reconnectInterval);
-      } else {
+      } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
         console.error('WebSocket 重連次數已達上限');
       }
     };
 
     this.ws.onerror = (error) => {
       console.error('WebSocket 錯誤:', error);
-      const maskedUrl = wsUrl.replace(token, 'TOKEN_HIDDEN');
-      console.error('WebSocket URL:', maskedUrl);
-      console.error('Token 長度:', token.length);
-      console.error('WebSocket 狀態:', this.ws?.readyState);
-      console.error('WebSocket readyState 說明:', {
-        0: 'CONNECTING',
-        1: 'OPEN',
-        2: 'CLOSING',
-        3: 'CLOSED'
-      }[this.ws?.readyState || 0]);
+      console.error('WebSocket URL:', wsUrl.replace(token, 'TOKEN_HIDDEN'));
+      console.error('WebSocket 狀態:', {
+        readyState: this.ws?.readyState,
+        readyStateText: {
+          0: 'CONNECTING',
+          1: 'OPEN',
+          2: 'CLOSING',
+          3: 'CLOSED'
+        }[this.ws?.readyState || 3],
+        companyLab: companyLab,
+        safeCompanyLab: safeCompanyLab,
+        protocol: this.ws?.protocol || '未設定',
+        extensions: this.ws?.extensions || '無'
+      });
+      
+      // 提供可能的解決方案建議
+      if (this.ws?.readyState === 3 || this.ws?.readyState === 0) {
+        console.error('可能的問題：');
+        console.error('1. ngrok 可能未配置支持 WebSocket');
+        console.error('2. 後端 WebSocket 服務器可能未運行');
+        console.error('3. URL 格式可能不正確');
+        console.error('4. Token 可能無效或已過期');
+        console.error('5. CORS 或網絡問題');
+      }
+      
       this.emit('error', error);
     };
   }

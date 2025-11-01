@@ -79,10 +79,10 @@ const Login: React.FC = () => {
         const comp = (data as any).company as string;
         localStorage.setItem('company', comp);
         localStorage.setItem('company_name', comp);
-        // 若未提供 company_lab，依公司推導預設實驗室（例如 NCCU -> nccu_lab）
+        // 若未提供 company_lab，依公司推導預設實驗室（例如 NCCU -> NCCU_lab，使用大寫）
         const existingLab = localStorage.getItem('company_lab');
         if (!existingLab) {
-          const derivedLab = `${comp}`.toLowerCase().replace(/\s+/g, '_') + '_lab';
+          const derivedLab = `${comp.toUpperCase().replace(/\s+/g, '_')}_lab`;
           localStorage.setItem('company_lab', derivedLab);
         }
       }
@@ -108,7 +108,7 @@ const Login: React.FC = () => {
       // 確保 superuser 具備預設公司與實驗室，以免 WS 或品牌顯示異常
       const userPerms = JSON.parse(localStorage.getItem('user_permissions') || '[]') as string[];
       if (userPerms.includes('create_user') && !localStorage.getItem('company_lab')) {
-        localStorage.setItem('company_lab', 'nccu_lab');
+        localStorage.setItem('company_lab', 'NCCU_lab');
       }
       
       navigate('/dashboard');

@@ -48,9 +48,11 @@ const Home: React.FC = () => {
         setIsLoading(true);
         setError('');
         
-        // 獲取最近的數據
+        // 獲取最近的數據（使用正確格式的 lab：公司名大寫 + _lab）
+        const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
+        const companyLab = localStorage.getItem('company_lab') || `${company.toUpperCase()}_lab`;
         const recentData = await getRecentData({
-          company_lab: localStorage.getItem('company_lab') || 'nccu_lab',
+          company_lab: companyLab,
           machine: 'aq',
           number: 1
         });
@@ -92,22 +94,34 @@ const Home: React.FC = () => {
 
     // 設置 WebSocket 連接
     const setupWebSocket = () => {
-      const companyLab = localStorage.getItem('company_lab') || 'nccu_lab';
+      // 獲取公司名稱並生成正確的 lab 格式（公司名大寫 + _lab）
+      const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
+      let companyLab = localStorage.getItem('company_lab');
+      
+      // 確保 lab 格式使用大寫公司名（例如：NCCU_lab，不是 nccu_lab）
+      if (!companyLab) {
+        companyLab = `${company.toUpperCase()}_lab`;
+      } else {
+        // 如果 localStorage 中的 company_lab 可能是小寫，確保轉換為大寫格式
+        const companyUpper = company.toUpperCase();
+        // 移除可能的 _lab 後綴，然後重新組合為大寫格式
+        const labNameWithoutSuffix = companyLab.replace(/_lab$/i, '');
+        companyLab = `${companyUpper}_lab`;
+      }
+      
       const sensor = 'aq'; // 感測器名稱
       const currentToken = localStorage.getItem('token') || token;
       
-      // 確保使用最新的 token
+      // 確保使用最新的 token 和正確格式的 lab（大寫公司名 + _lab）
       wsService.connect(currentToken, companyLab, sensor);
       
       wsService.on('connected', () => {
         setWsConnected(true);
         setError(''); // 連接成功時清除錯誤
-        console.log('WebSocket 已連接');
       });
       
       wsService.on('disconnected', () => {
         setWsConnected(false);
-        console.log('WebSocket 已斷開');
       });
       
       wsService.on('data', (data: any) => {
@@ -140,8 +154,6 @@ const Home: React.FC = () => {
         
         // 調試：記錄接收到的數據（僅在開發模式下）
         if (import.meta.env.DEV) {
-          console.log('WebSocket 接收到的數據:', data);
-          console.log('解析後的 values:', values);
         }
       });
       

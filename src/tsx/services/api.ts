@@ -117,7 +117,6 @@ async function refreshAccessToken(): Promise<string | null> {
 
   const refreshToken = localStorage.getItem('refresh_token');
   if (!refreshToken) {
-    console.warn('沒有 refresh_token，無法刷新 access_token');
     return null;
   }
 
@@ -175,7 +174,6 @@ async function refreshAccessToken(): Promise<string | null> {
           }
         } catch (e) {
           // 無法讀取錯誤詳情
-          console.warn('無法讀取錯誤響應:', e);
         }
 
         console.error(`❌ 刷新 token 失敗: ${response.status} ${response.statusText}`);
@@ -735,18 +733,6 @@ export class WebSocketService {
       wsUrl += `&sensor=${encodeURIComponent(sensor)}`;
     }
 
-    // 調試：記錄連接信息
-    if (import.meta.env.DEV) {
-      console.log('WebSocket 連接信息:', {
-        companyLab: companyLab,
-        safeCompanyLab: safeCompanyLab,
-        sensor: sensor,
-        tokenLength: token.length,
-        url: wsUrl.replace(token, 'TOKEN_HIDDEN'),
-        tokenPreview: token.substring(0, 20) + '...'
-      });
-    }
-
     try {
       this.ws = new WebSocket(wsUrl);
     } catch (error) {
@@ -762,53 +748,26 @@ export class WebSocketService {
 
     this.ws.onmessage = (event) => {
       try {
-        // 調試：記錄原始接收到的數據
-        if (import.meta.env.DEV) {
-          console.log('WebSocket 原始數據:', event.data);
-        }
-        
         const data = JSON.parse(event.data);
-        
-        if (import.meta.env.DEV) {
-          console.log('WebSocket 解析後的數據:', data);
-        }
         
         // 驗證數據格式，確保必要字段存在
         if (!data || typeof data !== 'object') {
-          if (import.meta.env.DEV) {
-            console.warn('WebSocket 數據格式無效:', data);
-          }
           return;
         }
         
         this.emit('data', data);
       } catch (error) {
         console.error('WebSocket 數據解析錯誤:', error);
-        console.error('原始數據:', event.data);
         this.emit('error', error);
       }
     };
 
     this.ws.onclose = async (event) => {
-      // 調試：記錄關閉信息
-      if (import.meta.env.DEV) {
-        console.log('WebSocket 關閉:', {
-          code: event.code,
-          reason: event.reason || '無原因',
-          wasClean: event.wasClean,
-          closeCodeText: this.getCloseCodeDescription(event.code)
-        });
-      }
-      
       this.emit('disconnected', event);
       
       // 自動重連（只有在異常關閉時才重連，正常關閉不重連）
       if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
-        
-        if (import.meta.env.DEV) {
-          console.log(`WebSocket 嘗試重連 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-        }
         
         // 重連前嘗試獲取最新的 token（可能已刷新）
         const currentToken = localStorage.getItem('token') || this.lastToken || token;
@@ -824,32 +783,6 @@ export class WebSocketService {
     };
 
     this.ws.onerror = (error) => {
-      console.error('WebSocket 錯誤:', error);
-      console.error('WebSocket URL:', wsUrl.replace(token, 'TOKEN_HIDDEN'));
-      console.error('WebSocket 狀態:', {
-        readyState: this.ws?.readyState,
-        readyStateText: {
-          0: 'CONNECTING',
-          1: 'OPEN',
-          2: 'CLOSING',
-          3: 'CLOSED'
-        }[this.ws?.readyState || 3],
-        companyLab: companyLab,
-        safeCompanyLab: safeCompanyLab,
-        protocol: this.ws?.protocol || '未設定',
-        extensions: this.ws?.extensions || '無'
-      });
-      
-      // 提供可能的解決方案建議
-      if (this.ws?.readyState === 3 || this.ws?.readyState === 0) {
-        console.error('可能的問題：');
-        console.error('1. ngrok 可能未配置支持 WebSocket');
-        console.error('2. 後端 WebSocket 服務器可能未運行');
-        console.error('3. URL 格式可能不正確');
-        console.error('4. Token 可能無效或已過期');
-        console.error('5. CORS 或網絡問題');
-      }
-      
       this.emit('error', error);
     };
   }
@@ -888,23 +821,6 @@ export class WebSocketService {
 
   get isConnected(): boolean {
     return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
-  }
-
-  private getCloseCodeDescription(code: number): string {
-    const descriptions: { [key: number]: string } = {
-      1000: '正常關閉',
-      1001: '端點離開',
-      1002: '協議錯誤',
-      1003: '不支持的數據類型',
-      1006: '異常關閉',
-      1007: '數據格式錯誤',
-      1008: '策略違反',
-      1009: '消息太大',
-      1010: '缺少擴展',
-      1011: '服務器錯誤',
-      1015: 'TLS 握手失敗'
-    };
-    return descriptions[code] || `未知錯誤代碼: ${code}`;
   }
 }
 
@@ -968,15 +884,23 @@ export async function deleteThresholds(payload: DeleteThresholdsRequest): Promis
 export interface ThresholdItem {
   company: string;
   lab: string;
-  sensor: string; // e.g., 'temperature', 'humidity', 'co2', etc.
+  sensor: string; // 機器類型（如 "aq"），而不是具體的感測器類型
   min?: number | null;
   max?: number | null;
   enabled?: boolean;
   // 後端可能以 threshold 子文件儲存上下限與啟用狀態
+  // threshold 可以是單個感測器的閾值，也可以是包含所有感測器閾值的對象
   threshold?: {
     min?: number | null;
     max?: number | null;
     enabled?: boolean;
+  } | {
+    // 包含所有感測器的閾值，鍵是感測器類型（如 "temperature", "humidity"）
+    [sensorType: string]: {
+      min?: number | null;
+      max?: number | null;
+      enabled?: boolean;
+    } | undefined;
   };
 }
 
@@ -1007,6 +931,7 @@ export interface GetThresholdBySensorParams {
 
 export async function getThresholdBySensor(params: GetThresholdBySensorParams): Promise<ThresholdItem | null> {
   // 以 GET + query 為唯一方式，避免後端 405
+  // 注意：params.sensor 應該是機器類型（如 "aq"），而不是具體的感測器類型
   const query = new URLSearchParams({ company: params.company, lab: params.lab, sensor: params.sensor }).toString();
   try {
     const result = await apiCall<any>(`/getThresholds?${query}`);
@@ -1016,24 +941,14 @@ export async function getThresholdBySensor(params: GetThresholdBySensorParams): 
         return null; // 沒有數據
       }
       // 後端返回格式：{"company": company,"lab":lab,"sensor":sensor,"threshold":threshold_in_db["threshold"]}
-      // threshold 裡面可能還有嵌套的感測器對象，例如：{"threshold": {"temperature": {"min": 20, "max": 30, "enabled": true}}}
+      // threshold 裡面包含所有感測器的閾值，例如：{"threshold": {"temperature": {"min": 20, "max": 30, "enabled": true}, "humidity": {...}}}
       if ('threshold' in result) {
-        let thresholdData = result.threshold;
-        
-        // 如果 threshold 裡面有嵌套的感測器對象（如 threshold.temperature），提取出來
-        if (thresholdData && typeof thresholdData === 'object' && params.sensor in thresholdData) {
-          thresholdData = thresholdData[params.sensor];
-        }
-        
+        // 直接返回整個 threshold 對象，包含所有感測器的閾值
         return {
           company: result.company || params.company,
           lab: result.lab || params.lab,
           sensor: result.sensor || params.sensor,
-          threshold: {
-            min: thresholdData?.min ?? null,
-            max: thresholdData?.max ?? null,
-            enabled: thresholdData?.enabled ?? true
-          }
+          threshold: result.threshold // 整個 threshold 對象，包含所有感測器的閾值
         } as ThresholdItem;
       }
     }
@@ -1052,18 +967,19 @@ export async function getThresholdBySensor(params: GetThresholdBySensorParams): 
 export type ThresholdUpdate = {
   company: string;
   lab: string;
-  sensor: string;
+  sensor: string; // 機器類型，應該是 "aq"
+  sensorType?: string; // 要設置的感測器類型（如 "temperature", "humidity" 等），如果未提供則使用 sensor 參數
   min?: number | null;
   max?: number | null;
   enabled?: boolean;
 };
 
 export async function setThresholds(item: ThresholdUpdate): Promise<{ message: string }> {
-  const { company, lab, sensor, min, max, enabled } = item;
+  const { company, lab, sensor, sensorType, min, max, enabled } = item;
   
   // 驗證必要字段
   if (!sensor) {
-    throw new Error('sensor 字段是必需的');
+    throw new Error('sensor 字段是必需的（機器類型，如 "aq"）');
   }
   if (!company) {
     throw new Error('company 字段是必需的');
@@ -1071,6 +987,9 @@ export async function setThresholds(item: ThresholdUpdate): Promise<{ message: s
   if (!lab) {
     throw new Error('lab 字段是必需的');
   }
+  
+  // 確定要設置的感測器類型
+  const targetSensorType = sensorType || sensor;
   
   // 確保 min 和 max 是有效數字或 null
   const validMin = (typeof min === 'number' && !isNaN(min)) ? min : null;
@@ -1088,29 +1007,34 @@ export async function setThresholds(item: ThresholdUpdate): Promise<{ message: s
     sensorConfig.enabled = enabled;
   }
   
-  // 驗證 sensor 值（必須在添加感測器字段之前）
-  if (!sensor || typeof sensor !== 'string') {
-    console.error('❌ sensor 字段無效:', sensor);
-    throw new Error(`sensor 字段無效: ${sensor}`);
+  // 驗證 targetSensorType 值
+  if (!targetSensorType || typeof targetSensorType !== 'string') {
+    console.error('❌ 感測器類型字段無效:', targetSensorType);
+    throw new Error(`感測器類型字段無效: ${targetSensorType}`);
   }
   
   // 後端的 threshold_data 模型要求所有感測器欄位都存在
   // 每個感測器都是 Optional[dict] 格式
   const allSensors = ['temperature','humidity','pm25','pm10','pm25_average','pm10_average','co2','tvoc'];
   
+  // 驗證 targetSensorType 是否在允許的感測器列表中
+  if (!allSensors.includes(targetSensorType)) {
+    throw new Error(`不支持的感測器類型: ${targetSensorType}`);
+  }
+  
   // 後端期望的格式：threshold_data
   // 所有感測器字段都是 Optional[dict]，sensor/company/lab 在頂層
-  // 注意：sensor 字段必須在頂層，不能缺少
+  // 注意：sensor 字段必須在頂層，值是機器類型（如 "aq"）
   const payload: Record<string, unknown> = {
     company,
     lab,
-    sensor, // sensor 字段必須在頂層（在感測器字段之前）
+    sensor, // sensor 字段必須在頂層，值是機器類型（如 "aq"）
   };
   
   // 添加所有感測器字段（每個都是 Optional[dict]）
   // 注意：這裡的 key 是感測器名稱（如 "temperature"），不會與頂層的 "sensor" 字段衝突
   allSensors.forEach((key) => {
-    if (key === sensor) {
+    if (key === targetSensorType) {
       // 目標感測器使用配置物件（dict 格式）
       payload[key] = Object.keys(sensorConfig).length > 0 ? sensorConfig : null;
     } else {
@@ -1118,12 +1042,6 @@ export async function setThresholds(item: ThresholdUpdate): Promise<{ message: s
       payload[key] = null;
     }
   });
-  
-  // 最終確保 sensor 字段在頂層（不會被感測器字段覆蓋，因為感測器字段名稱不同）
-  // sensor 字段存儲的是字符串（如 "temperature"），而感測器字段存儲的是 dict 或 null
-  if (!payload.sensor || payload.sensor !== sensor) {
-    payload.sensor = sensor;
-  }
   
   
   // 最終驗證：確保 sensor 字段存在

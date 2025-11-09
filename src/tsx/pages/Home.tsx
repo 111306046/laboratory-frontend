@@ -29,6 +29,58 @@ const Home: React.FC = () => {
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
+  // 安全地轉換數值的輔助函數
+  const toNumber = (value: any, defaultValue: number = 0): number => {
+    if (value === null || value === undefined || value === '') {
+      return defaultValue;
+    }
+    const num = typeof value === 'number' ? value : parseFloat(String(value));
+    return isNaN(num) ? defaultValue : num;
+  };
+
+  // 從 API 獲取數據並更新狀態的函數（可重用）
+  const fetchData = async (showLoading: boolean = false) => {
+    try {
+      if (showLoading) {
+        setIsLoading(true);
+      }
+      setError('');
+      
+      // 獲取最近的數據（使用公司名稱的原始格式）
+      const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
+      const companyLab = localStorage.getItem('company_lab') || `${company.replace(/\s+/g, '_')}_lab`;
+      const recentData = await getRecentData({
+        company_lab: companyLab,
+        machine: 'aq',
+        number: 1
+      });
+      
+      if (recentData.length > 0) {
+        const latestData = recentData[0];
+        const values = (latestData as any).values || latestData;
+        
+        setLabData({
+          co2: Math.round(toNumber(values.co2, 0)),
+          humidity: Math.round(toNumber(values.humidity, 0) * 10) / 10, // 保留一位小數
+          pm10: Math.round(toNumber(values.pm10, 0)),
+          pm10_average: Math.round(toNumber(values.pm10_average, 0)),
+          pm25: Math.round(toNumber(values.pm25, 0)),
+          pm25_average: Math.round(toNumber(values.pm25_average, 0)),
+          temperature: Math.round(toNumber(values.temperature || values.temperatu, 0) * 10) / 10, // 保留一位小數
+          tvoc: Math.round(toNumber(values.tvoc, 0) * 1000) / 1000 // 保留三位小數
+        });
+        setLastUpdate(new Date());
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '獲取數據失敗');
+      console.error('獲取數據失敗:', err);
+    } finally {
+      if (showLoading) {
+        setIsLoading(false);
+      }
+    }
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -38,54 +90,7 @@ const Home: React.FC = () => {
     }
 
     // 初始數據獲取
-    const fetchInitialData = async () => {
-      try {
-        setIsLoading(true);
-        setError('');
-        
-        // 獲取最近的數據（使用公司名稱的原始格式）
-        const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
-        const companyLab = localStorage.getItem('company_lab') || `${company.replace(/\s+/g, '_')}_lab`;
-        const recentData = await getRecentData({
-          company_lab: companyLab,
-          machine: 'aq',
-          number: 1
-        });
-        
-        if (recentData.length > 0) {
-          const latestData = recentData[0];
-          // 處理轉換後的數據格式（getRecentData 返回的是轉換後的 SensorData）
-          // 但也要處理可能包含 values 對象的格式
-          const values = (latestData as any).values || latestData;
-          
-          // 安全地轉換數值，避免 NaN
-          const toNumber = (value: any, defaultValue: number = 0): number => {
-            if (value === null || value === undefined || value === '') {
-              return defaultValue;
-            }
-            const num = typeof value === 'number' ? value : parseFloat(String(value));
-            return isNaN(num) ? defaultValue : num;
-          };
-          
-          setLabData({
-            co2: Math.round(toNumber(values.co2, 0)),
-            humidity: Math.round(toNumber(values.humidity, 0) * 10) / 10, // 保留一位小數
-            pm10: Math.round(toNumber(values.pm10, 0)),
-            pm10_average: Math.round(toNumber(values.pm10_average, 0)),
-            pm25: Math.round(toNumber(values.pm25, 0)),
-            pm25_average: Math.round(toNumber(values.pm25_average, 0)),
-            temperature: Math.round(toNumber(values.temperature || values.temperatu, 0) * 10) / 10, // 保留一位小數
-            tvoc: Math.round(toNumber(values.tvoc, 0) * 1000) / 1000 // 保留三位小數
-          });
-          setLastUpdate(new Date());
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '獲取初始數據失敗');
-        console.error('獲取初始數據失敗:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    fetchData(true);
 
     // 設置 WebSocket 連接
     const setupWebSocket = () => {
@@ -116,40 +121,12 @@ const Home: React.FC = () => {
       });
       
       wsService.on('data', (data: any) => {
-        // 調試：記錄接收到的原始數據
-        if (import.meta.env.DEV) {
-          console.log('WebSocket 收到數據:', data);
-        }
-
-        // 安全地轉換數值，避免 NaN
-        const toNumber = (value: any, defaultValue: number = 0): number => {
-          if (value === null || value === undefined || value === '') {
-            return defaultValue;
-          }
-          const num = typeof value === 'number' ? value : parseFloat(String(value));
-          return isNaN(num) ? defaultValue : num;
-        };
-
         // 數據可能在 values 對象中（WebSocket 格式），也可能直接在頂層（API 格式）
         const values = data.values || data;
         
-        if (import.meta.env.DEV) {
-          console.log('解析後的 values:', values);
-          console.log('數據字段:', {
-            co2: values.co2,
-            humidity: values.humidity,
-            pm10: values.pm10,
-            pm10_average: values.pm10_average,
-            pm25: values.pm25,
-            pm25_average: values.pm25_average,
-            temperature: values.temperature || values.temperatu,
-            tvoc: values.tvoc
-          });
-        }
-        
         // 更新即時數據，使用安全的數值轉換
         const newLabData = {
-          co2: Math.round(toNumber(values.co2, 0)),
+          co2: Math.round(toNumber(values.co2, 0)), 
           humidity: Math.round(toNumber(values.humidity, 0) * 10) / 10, // 保留一位小數
           pm10: Math.round(toNumber(values.pm10, 0)),
           pm10_average: Math.round(toNumber(values.pm10_average, 0)),
@@ -158,10 +135,6 @@ const Home: React.FC = () => {
           temperature: Math.round(toNumber(values.temperature || values.temperatu, 0) * 10) / 10, // 保留一位小數
           tvoc: Math.round(toNumber(values.tvoc, 0) * 1000) / 1000 // 保留三位小數
         };
-        
-        if (import.meta.env.DEV) {
-          console.log('更新後的 labData:', newLabData);
-        }
         
         setLabData(newLabData);
         setLastUpdate(new Date());
@@ -174,12 +147,17 @@ const Home: React.FC = () => {
       });
     };
 
-    fetchInitialData();
     setupWebSocket();
+
+    // 設置每 15 秒自動刷新數據
+    const refreshInterval = setInterval(() => {
+      fetchData(false); // 不顯示加載狀態，避免閃爍
+    }, 15000); // 15 秒 = 15000 毫秒 
 
     // 清理函數
     return () => {
       wsService.disconnect();
+      clearInterval(refreshInterval);
     };
   }, []);
 

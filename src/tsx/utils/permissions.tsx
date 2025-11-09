@@ -11,7 +11,7 @@ export const PERMISSIONS = {
   SET_THRESHOLDS: 'set_thresholds',
   CONTROL_MACHINE: 'control_machine',
   CHANGE_PASSWORD: 'change_password',
-  SUPERUSER: 'superuser'
+  SUPERUSER: 'superuser',
 } as const;
 
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS];
@@ -27,7 +27,7 @@ export const ALLOWED_PERMISSIONS: Permission[] = [
   'set_thresholds',
   'control_machine',
   'change_password',
-  'superuser'
+  'superuser',
 ] as Permission[];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -40,7 +40,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.SET_THRESHOLDS]: '設置警報閾值',
   [PERMISSIONS.CONTROL_MACHINE]: '控制機器',
   [PERMISSIONS.CHANGE_PASSWORD]: '修改密碼',
-  [PERMISSIONS.SUPERUSER]: '超級使用者'
+  [PERMISSIONS.SUPERUSER]: '超級使用者',
 };
 
 // 驗證權限是否在允許列表中
@@ -68,7 +68,6 @@ export const getPermissionOptions = (companyExtraAuth?: boolean) => {
       if (companyExtraAuth === false && permission === 'set_thresholds') {
         return false;
       }
-      
       return true;
     })
     .map(permission => ({

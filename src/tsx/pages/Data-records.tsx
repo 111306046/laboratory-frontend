@@ -82,13 +82,13 @@ const DataRecords: React.FC = () => {
             data = searchResult as SensorData[];
           }
         } else {
-          // 使用最近數據 API
           data = await getRecentData({
             company_lab: selectedCompanyLab,
             machine: selectedMachine,
             number: dataCount
           });
         }
+  
         
         // 依時間由新到舊排序
         const toMs = (ts: string): number => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiHome, FiUser, FiSettings, FiMenu, FiLogOut, FiDatabase, FiAlertCircle, FiBarChart2, FiPower } from 'react-icons/fi';
+import { FiHome, FiUser, FiSettings, FiMenu, FiLogOut, FiDatabase, FiAlertCircle, FiBarChart2 } from 'react-icons/fi';
 import { logout } from '../services/api';
 
 interface SidebarProps {
@@ -83,13 +83,14 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   // 檢查用戶是否有特定權限
   const hasPermission = (permission: string): boolean => {
     if (permission === 'none') return true;
-    if (permission === 'superuser') {
-      const isSuper = localStorage.getItem('is_superuser') === 'true' || userInfo.user_id === 'yezyez' || userInfo.permissions.includes('superuser');
-      return isSuper;
+    // 特殊處理：公司管理需要 create_user 權限（管理員才能管理公司）
+    // 或者 yezyez 帳號也可以訪問
+    if (permission === 'create_user' && userInfo.user_id === 'yezyez') {
+      return true;
     }
-    // 特殊處理：警報設置允許 view_alerts 或 modify_lab 權限
-    if (permission === 'view_alerts') {
-      return userInfo.permissions.includes('view_alerts') || userInfo.permissions.includes('modify_lab');
+    // 特殊處理：警報設置允許 set_thresholds 或 modify_lab 權限
+    if (permission === 'set_thresholds') {
+      return userInfo.permissions.includes('set_thresholds') || userInfo.permissions.includes('modify_lab');
     }
     return userInfo.permissions.includes(permission);
   };
@@ -99,12 +100,11 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     const allNavItems: NavItem[] = [
       { title: '首頁', path: '/dashboard', icon: <FiHome size={20} />, requiredPermission: 'none' }, // 所有人都可以訪問
       { title: '數據記錄', path: '/data-records', icon: <FiDatabase size={20} />, requiredPermission: 'view_data' },
-      { title: '警報設置', path: '/alert', icon: <FiAlertCircle size={20} />, requiredPermission: 'view_alerts' }, // 允許 view_alerts 或 modify_lab
-      { title: '統計圖表', path: '/static-chart', icon: <FiBarChart2 size={20} />, requiredPermission: 'view_statistics' },
+      { title: '警報設置', path: '/alert', icon: <FiAlertCircle size={20} />, requiredPermission: 'set_thresholds' }, // 允許 set_thresholds 或 modify_lab
+      { title: '統計圖表', path: '/static-chart', icon: <FiBarChart2 size={20} />, requiredPermission: 'view_data' },
       { title: '用戶管理', path: '/PU-addusers', icon: <FiUser size={20} />, requiredPermission: 'get_users' },
       { title: '實驗室管理', path: '/PU-laboratarymnagement', icon: <FiSettings size={20} />, requiredPermission: 'get_labs' },
-      { title: '公司管理', path: '/manage-company', icon: <FiSettings size={20} />, requiredPermission: 'superuser' },
-      { title: '機器控制', path: '/machine-control', icon: <FiPower size={20} />, requiredPermission: 'control_machine' },
+      { title: '公司管理', path: '/manage-company', icon: <FiSettings size={20} />, requiredPermission: 'create_user' },
     ];
 
     return allNavItems.filter(item => {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, UserPlus, Shield, Edit, Trash2, Eye } from 'lucide-react';
+import { Search, UserPlus, Trash2,Shield, Edit,  Eye,  FlaskConical } from 'lucide-react';
 import { 
   getPermissionOptions, 
   validatePermissions, 
@@ -110,13 +110,7 @@ const AdminManagement = () => {
   // 在編輯用戶時，根據 editingUser.company 判斷
   const getPermissionOptionsForCompany = (companyName?: string) => {
     const companyHasExtraAuth = getCompanyExtraAuth(companyName || '');
-    const options = getPermissionOptions(companyHasExtraAuth).map(option => {
-      // 為某些權限添加額外說明
-      if (option.value === 'control_machine') {
-        return { ...option, label: '控制機器 (謹慎使用)' };
-      }
-      return option;
-    });
+    const options = getPermissionOptions(companyHasExtraAuth);
     return options;
   };
   
@@ -197,83 +191,6 @@ const AdminManagement = () => {
     if (permissions.includes('modify_lab' as Permission)) return '實驗室管理員';
     if (permissions.includes('view_data' as Permission)) return '數據查看者';
     return '一般用戶';
-  };
-
-  // 獲取用戶角色類型
-  const getUserRoleType = (permissions: Permission[]) => {
-    if (permissions.includes('create_user' as Permission)) return 'admin';
-    if (permissions.includes('modify_lab' as Permission)) return 'lab_manager';
-    if (permissions.includes('view_data' as Permission)) return 'data_viewer';
-    return 'user';
-  };
-
-
-
-  // 修改用戶權限
-  const modifyUserPermissions = async (account: string, newPermissions: Permission[]) => {
-    try {
-      // 驗證權限是否在允許列表中
-      const permissionStrings = newPermissions.map(p => p as string);
-      const validatedPermissions = validatePermissions(permissionStrings);
-      
-      console.log('修改權限 - 原始權限:', permissionStrings);
-      console.log('修改權限 - 驗證後權限:', validatedPermissions);
-      
-      if (validatedPermissions.length !== newPermissions.length) {
-        const invalidPermissions = newPermissions.filter(p => !isValidPermission(p as string));
-        console.warn('發現無效權限:', invalidPermissions);
-        alert(`發現無效權限: ${invalidPermissions.join(', ')}。已自動過濾。`);
-      }
-      
-      const response = await fetch('/api/modifyPermissions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true', // 跳過 ngrok 的瀏覽器警告頁面
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          account: account,
-          func_permissions: validatedPermissions.map(p => p as string)
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || '修改權限失敗');
-      }
-
-      alert('權限修改成功！');
-      fetchUsers(); // 重新獲取用戶列表
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '修改權限失敗');
-      console.error('修改權限失敗:', err);
-    }
-  };
-
-  // 角色切換
-  const toggleUserRole = async (user: User) => {
-    const currentRole = getUserRoleType(user.func_permissions);
-    let newPermissions: Permission[];
-    
-    switch (currentRole) {
-      case 'admin':
-        newPermissions = ['view_data' as Permission];
-        break;
-      case 'user':
-        newPermissions = ['create_user', 'modify_user', 'get_users', 'modify_lab', 'get_labs', 'view_data', 'control_machine', 'change_password'] as Permission[];
-        break;
-      case 'lab_manager':
-        newPermissions = ['view_data' as Permission];
-        break;
-      case 'data_viewer':
-        newPermissions = ['view_data' as Permission];
-        break;
-      default:
-        newPermissions = ['create_user', 'modify_user', 'get_users', 'modify_lab', 'get_labs', 'view_data', 'control_machine', 'change_password'] as Permission[];
-    }
-    
-    await modifyUserPermissions(user.account, newPermissions);
   };
 
   // 新增用戶
@@ -612,7 +529,7 @@ const AdminManagement = () => {
                 {users.filter(u => u.func_permissions.includes('modify_lab' as Permission)).length}
               </p>
             </div>
-            <Trash2 className="w-8 h-8 text-red-500" />
+            <FlaskConical className="w-8 h-8 text-red-500" />
           </div>
         </div>
       </div>
@@ -699,21 +616,13 @@ const AdminManagement = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        user.func_permissions.includes('create_user' as Permission) 
-                          ? 'bg-blue-100 text-blue-800' 
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {getUserRoleDisplay(user.func_permissions)}
-                      </span>
-                      <button
-                        onClick={() => toggleUserRole(user)}
-                        className="text-blue-600 hover:text-blue-800 text-sm"
-                      >
-                        切換
-                      </button>
-                    </div>
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      user.func_permissions.includes('create_user' as Permission) 
+                        ? 'bg-blue-100 text-blue-800' 
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {getUserRoleDisplay(user.func_permissions)}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {user.company}

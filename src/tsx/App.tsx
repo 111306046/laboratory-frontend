@@ -9,7 +9,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Alert from './pages/Alert';
 import StaticChart from './pages/StaticChart';
 import ManageCompany from './pages/ManageCompany';
-import MachineControl from './pages/MachineControl';
 
 function App() {
   return (
@@ -17,16 +16,14 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/home" element={<Home />} />
+        <Route path="/home" element={<ProtectedRoute requiredPermission="view_data"><Layout><Home /></Layout></ProtectedRoute>} />
         <Route path="/data-records" element={<ProtectedRoute requiredPermission="view_data"><Layout><DataRecords /></Layout></ProtectedRoute>} />
-        <Route path="/dashboard" element={<ProtectedRoute><Layout><Home /></Layout></ProtectedRoute>} />
-        <Route path="/PU-addusers" element={<ProtectedRoute><Layout><AddUser /></Layout></ProtectedRoute>} />
-        <Route path="/PU-laboratarymnagement" element={<ProtectedRoute><Layout><LaboratoryManagement /></Layout></ProtectedRoute>} />        
-        <Route path="/alert" element={<ProtectedRoute requiredPermission="view_alerts"><Layout><Alert /></Layout></ProtectedRoute>} />
-        <Route path="/manage-company" element={<ProtectedRoute><Layout><ManageCompany /></Layout></ProtectedRoute>} />
-        <Route path="/managecompany" element={<ProtectedRoute><Layout><ManageCompany /></Layout></ProtectedRoute>} />
-        <Route path="/static-chart" element={<ProtectedRoute><Layout><StaticChart /></Layout></ProtectedRoute>} />
-        <Route path="/machine-control" element={<ProtectedRoute requiredPermission="control_machine"><Layout><MachineControl /></Layout></ProtectedRoute>} />
+        <Route path="/dashboard" element={<ProtectedRoute requiredPermission="view_data"><Layout><Home /></Layout></ProtectedRoute>} />
+        <Route path="/PU-addusers" element={<ProtectedRoute requiredPermission="get_users"><Layout><AddUser /></Layout></ProtectedRoute>} />
+        <Route path="/PU-laboratarymnagement" element={<ProtectedRoute requiredPermission="get_labs"><Layout><LaboratoryManagement /></Layout></ProtectedRoute>} />        
+        <Route path="/alert" element={<ProtectedRoute requiredPermission="set_thresholds"><Layout><Alert /></Layout></ProtectedRoute>} />
+        <Route path="/manage-company" element={<ProtectedRoute requiredPermission="create_user"><Layout><ManageCompany /></Layout></ProtectedRoute>} />
+        <Route path="/static-chart" element={<ProtectedRoute requiredPermission="view_data"><Layout><StaticChart /></Layout></ProtectedRoute>} />
 
       </Routes>
     </BrowserRouter>

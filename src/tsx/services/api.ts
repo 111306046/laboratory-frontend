@@ -1138,23 +1138,3 @@ export async function deleteUser(payload: DeleteUserRequest): Promise<{ message:
     body: JSON.stringify(payload)
   });
 }
-
-// 18. 機器控制
-export interface MachineControlRequest {
-  company: string;
-  machine: string;
-}
-
-export async function machineOn(payload: MachineControlRequest): Promise<any> {
-  return apiCall<any>('/machineOn', {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
-}
-
-export async function machineOff(payload: MachineControlRequest): Promise<any> {
-  return apiCall<any>('/machineOff', {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
-}

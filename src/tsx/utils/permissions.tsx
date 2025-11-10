@@ -9,14 +9,16 @@ export const PERMISSIONS = {
   GET_LABS: 'get_labs',
   VIEW_DATA: 'view_data',
   SET_THRESHOLDS: 'set_thresholds',
-  CONTROL_MACHINE: 'control_machine',
   CHANGE_PASSWORD: 'change_password',
-  SUPERUSER: 'superuser',
+  MODIFY_NOTIFICATION: 'modify_notification',
 } as const;
 
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS];
 
-// 後端允許的權限列表 - 完全匹配用戶提供的 auth 數組
+// 後端允許的權限列表 - 完全匹配後端 func_auth 和 extra_func_auth
+// func_auth: ["create_user","modify_user","get_users","modify_lab","get_labs","view_data","change_password"]
+// extra_func_auth: ["set_thresholds","modify_notification"]
+// 注意：control_machine 已移除，不再使用
 export const ALLOWED_PERMISSIONS: Permission[] = [
   'create_user',
   'modify_user', 
@@ -24,10 +26,9 @@ export const ALLOWED_PERMISSIONS: Permission[] = [
   'modify_lab',
   'get_labs',
   'view_data',
-  'set_thresholds',
-  'control_machine',
   'change_password',
-  'superuser',
+  'set_thresholds',
+  'modify_notification',
 ] as Permission[];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -38,9 +39,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.GET_LABS]: '查看實驗室',
   [PERMISSIONS.VIEW_DATA]: '查看數據',
   [PERMISSIONS.SET_THRESHOLDS]: '設置警報閾值',
-  [PERMISSIONS.CONTROL_MACHINE]: '控制機器',
   [PERMISSIONS.CHANGE_PASSWORD]: '修改密碼',
-  [PERMISSIONS.SUPERUSER]: '超級使用者',
+  [PERMISSIONS.MODIFY_NOTIFICATION]: '修改通知',
 };
 
 // 驗證權限是否在允許列表中
@@ -55,18 +55,17 @@ export const isValidPermission = (permission: string): boolean => {
   return ALLOWED_PERMISSIONS.includes(permission as Permission);
 };
 
-// 獲取所有允許的權限選項（排除 superuser，因為它不能手動分配）
-// 如果公司沒有 extra_auth，則排除 set_thresholds 和 allow_notify 相關權限
+// 獲取所有允許的權限選項
+// 如果公司沒有 extra_auth，則排除 extra_func_auth 相關權限（set_thresholds, modify_notification）
 export const getPermissionOptions = (companyExtraAuth?: boolean) => {
   const result = ALLOWED_PERMISSIONS
     .filter(permission => {
-      // 排除 superuser
-      if (permission === 'superuser') return false;
-      
-      // 如果公司明確沒有 extra_auth（嚴格等於 false），排除 set_thresholds
-      // 如果 companyExtraAuth 為 true、undefined 或其他值，則包含 set_thresholds
-      if (companyExtraAuth === false && permission === 'set_thresholds') {
-        return false;
+      // 如果公司明確沒有 extra_auth（嚴格等於 false），排除 extra_func_auth 權限
+      // extra_func_auth: ["set_thresholds","modify_notification"]
+      if (companyExtraAuth === false) {
+        if (permission === 'set_thresholds' || permission === 'modify_notification') {
+          return false;
+        }
       }
       return true;
     })

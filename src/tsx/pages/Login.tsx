@@ -45,10 +45,12 @@ const Login: React.FC = () => {
       
       // 優先使用後端登入回傳的權限與公司（若提供）
       if (account === 'yezyez') {
+        // yezyez 擁有所有權限（func_auth + extra_func_auth）
         const superPerms = [
           'view_data', 'create_user', 'modify_user', 'get_users',
-          'modify_lab', 'get_labs', 'view_alerts', 'view_statistics',
-          'control_machine', 'change_password'
+          'modify_lab', 'get_labs',
+          'change_password',
+          'set_thresholds', 'modify_notification'
         ];
         localStorage.setItem('user_permissions', JSON.stringify(superPerms));
         localStorage.setItem('is_superuser', 'true');
@@ -59,21 +61,13 @@ const Login: React.FC = () => {
         // 後端若以 permissions 回傳
         const perms = (data as any).permissions as string[];
         localStorage.setItem('user_permissions', JSON.stringify(perms));
-        localStorage.setItem('is_superuser', perms.includes('superuser') ? 'true' : 'false');
+        // 判斷是否為管理員（擁有 create_user 權限）
+        localStorage.setItem('is_superuser', perms.includes('create_user') ? 'true' : 'false');
       } else if (data.func_permissions && Array.isArray(data.func_permissions)) {
-        // 若為超級使用者，給完整權限集合
-        if (data.func_permissions.includes('superuser')) {
-          const superPerms = [
-            'view_data', 'create_user', 'modify_user', 'get_users',
-            'modify_lab', 'get_labs', 'view_alerts', 'view_statistics',
-            'control_machine', 'change_password'
-          ];
-          localStorage.setItem('user_permissions', JSON.stringify(superPerms));
-          localStorage.setItem('is_superuser', 'true');
-        } else {
-          localStorage.setItem('user_permissions', JSON.stringify(data.func_permissions));
-          localStorage.setItem('is_superuser', 'false');
-        }
+        // 後端回傳 func_permissions
+        localStorage.setItem('user_permissions', JSON.stringify(data.func_permissions));
+        // 判斷是否為管理員（擁有 create_user 權限）
+        localStorage.setItem('is_superuser', data.func_permissions.includes('create_user') ? 'true' : 'false');
       }
       if ((data as any).company) {
         const comp = (data as any).company as string;

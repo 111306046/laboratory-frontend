@@ -102,10 +102,15 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredPermi
 
   // 檢查權限
   if (requiredPermission) {
-    // 特殊處理：警報設置允許 view_alerts 或 modify_lab 權限
     let hasAccess = false;
-    if (requiredPermission === 'view_alerts') {
-      hasAccess = userInfo.permissions.includes('view_alerts') || userInfo.permissions.includes('modify_lab');
+    // 特殊處理：公司管理需要 create_user 權限（管理員才能管理公司）
+    // 或者 yezyez 帳號也可以訪問
+    if (requiredPermission === 'create_user') {
+      hasAccess = userInfo.permissions.includes('create_user') || userInfo.user_id === 'yezyez';
+    }
+    // 特殊處理：警報設置允許 set_thresholds 或 modify_lab 權限
+    else if (requiredPermission === 'set_thresholds') {
+      hasAccess = userInfo.permissions.includes('set_thresholds') || userInfo.permissions.includes('modify_lab');
     } else {
       hasAccess = userInfo.permissions.includes(requiredPermission);
     }

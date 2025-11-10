@@ -9,6 +9,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Alert from './pages/Alert';
 import StaticChart from './pages/StaticChart';
 import ManageCompany from './pages/ManageCompany';
+import MachineControl from './pages/MachineControl';
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
         <Route path="/manage-company" element={<ProtectedRoute><Layout><ManageCompany /></Layout></ProtectedRoute>} />
         <Route path="/managecompany" element={<ProtectedRoute><Layout><ManageCompany /></Layout></ProtectedRoute>} />
         <Route path="/static-chart" element={<ProtectedRoute><Layout><StaticChart /></Layout></ProtectedRoute>} />
+        <Route path="/machine-control" element={<ProtectedRoute requiredPermission="control_machine"><Layout><MachineControl /></Layout></ProtectedRoute>} />
 
       </Routes>
     </BrowserRouter>

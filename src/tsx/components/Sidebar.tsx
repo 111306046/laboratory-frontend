@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiHome, FiUser, FiSettings, FiMenu, FiLogOut, FiDatabase, FiAlertCircle, FiBarChart2 } from 'react-icons/fi';
+import { FiHome, FiUser, FiSettings, FiMenu, FiLogOut, FiDatabase, FiAlertCircle, FiBarChart2, FiPower } from 'react-icons/fi';
+import { logout } from '../services/api';
 
 interface SidebarProps {
   sidebarOpen: boolean;
@@ -103,6 +104,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       { title: '用戶管理', path: '/PU-addusers', icon: <FiUser size={20} />, requiredPermission: 'get_users' },
       { title: '實驗室管理', path: '/PU-laboratarymnagement', icon: <FiSettings size={20} />, requiredPermission: 'get_labs' },
       { title: '公司管理', path: '/manage-company', icon: <FiSettings size={20} />, requiredPermission: 'superuser' },
+      { title: '機器控制', path: '/machine-control', icon: <FiPower size={20} />, requiredPermission: 'control_machine' },
     ];
 
     return allNavItems.filter(item => {
@@ -120,11 +122,22 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   };
 
   // 登出處理
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user_account');
-    localStorage.removeItem('user_permissions');
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (refreshToken) {
+        await logout(refreshToken);
+      }
+    } catch (error) {
+      console.error('登出 API 調用失敗:', error);
+    } finally {
+      // 無論 API 調用成功與否，都清除本地存儲並跳轉
+      localStorage.removeItem('token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user_account');
+      localStorage.removeItem('user_permissions');
+      navigate('/login');
+    }
   };
 
   const filteredNavItems = getFilteredNavItems();

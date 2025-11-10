@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 // 定義實驗室介面
 interface Sensor {
@@ -45,18 +45,6 @@ const LaboratoryManagement = () => {
     company: '',
     lab: ''
   });
-
-  // 感測器類型選項
-  const sensorTypes = [
-    { value: 'temperature', label: '溫度', defaultUnit: '°C' },
-    { value: 'humidity', label: '濕度', defaultUnit: '%' },
-    { value: 'pressure', label: '壓力', defaultUnit: 'Pa' },
-    { value: 'ph', label: 'pH值', defaultUnit: 'pH' },
-    { value: 'light', label: '光照', defaultUnit: 'lux' },
-    { value: 'co2', label: '二氧化碳', defaultUnit: 'ppm' },
-    { value: 'oxygen', label: '氧氣', defaultUnit: '%' },
-    { value: 'vibration', label: '震動', defaultUnit: 'Hz' }
-  ];
 
   // 獲取實驗室列表
   const fetchLabs = async () => {
@@ -331,15 +319,6 @@ const LaboratoryManagement = () => {
         console.error('刪除感測器失敗:', err);
       }
     }
-  };
-
-  // 感測器類型改變時自動設置單位
-  const handleSensorTypeChange = (type: string) => {
-    const selectedType = sensorTypes.find(t => t.value === type);
-    setNewSensor({
-      ...newSensor,
-      name: selectedType ? selectedType.label + '感測器' : newSensor.name
-    });
   };
 
   // 顯示加載狀態

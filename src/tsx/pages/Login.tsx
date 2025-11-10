@@ -93,9 +93,9 @@ const Login: React.FC = () => {
         const userLab = (data as any).lab;
         // lab 可能是字符串或數組
         localStorage.setItem('user_lab', JSON.stringify(userLab));
-      } else if (data.company_lab) {
+      } else if ((data as any).company_lab) {
         // 如果沒有 lab，使用 company_lab
-        localStorage.setItem('user_lab', JSON.stringify(data.company_lab));
+        localStorage.setItem('user_lab', JSON.stringify((data as any).company_lab));
       }
 
       // 若登入回傳沒有包含權限，不再呼叫 /getUsers（避免 401），改給最小集

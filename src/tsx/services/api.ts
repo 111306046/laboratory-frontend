@@ -974,7 +974,10 @@ export type ThresholdUpdate = {
   enabled?: boolean;
 };
 
-export async function setThresholds(item: ThresholdUpdate): Promise<{ message: string }> {
+export async function setThresholds(
+  item: ThresholdUpdate, 
+  currentThresholds?: Record<string, any> | null
+): Promise<{ message: string }> {
   const { company, lab, sensor, sensorType, min, max, enabled } = item;
   
   // 驗證必要字段
@@ -1032,17 +1035,26 @@ export async function setThresholds(item: ThresholdUpdate): Promise<{ message: s
   };
   
   // 添加所有感測器字段（每個都是 Optional[dict]）
-  // 注意：這裡的 key 是感測器名稱（如 "temperature"），不會與頂層的 "sensor" 字段衝突
+  // 如果提供了 currentThresholds，則保留其他感測器的值；否則設為 null
   allSensors.forEach((key) => {
     if (key === targetSensorType) {
-      // 目標感測器使用配置物件（dict 格式）
+      // 目標感測器使用新的配置物件（dict 格式）
       payload[key] = Object.keys(sensorConfig).length > 0 ? sensorConfig : null;
     } else {
-      // 其他感測器設為 null（Optional[dict] 可以是 null）
-      payload[key] = null;
+      // 其他感測器：如果有 currentThresholds 且該感測器存在，保留原值；否則設為 null
+      if (currentThresholds && typeof currentThresholds === 'object' && key in currentThresholds) {
+        const existingValue = currentThresholds[key];
+        // 如果現有值是有效對象，保留它；否則設為 null
+        if (existingValue && typeof existingValue === 'object' && existingValue !== null) {
+          payload[key] = existingValue;
+        } else {
+          payload[key] = null;
+        }
+      } else {
+        payload[key] = null;
+      }
     }
   });
-  
   
   // 最終驗證：確保 sensor 字段存在
   if (!('sensor' in payload) || !payload.sensor) {
@@ -1100,5 +1112,49 @@ export async function deleteCompany(payload: DeleteCompanyRequest): Promise<{ me
   return apiCall<{ message: string }>('/deleteCompany', {
     method: 'POST',
     body: JSON.stringify(requestPayload)
+  });
+}
+
+// 16. 登出
+export interface LogoutRequest {
+  refresh_token: string;
+}
+
+export async function logout(refreshToken: string): Promise<{ message: string }> {
+  return apiCall<{ message: string }>('/logout', {
+    method: 'POST',
+    body: JSON.stringify({ refresh_token: refreshToken })
+  });
+}
+
+// 17. 刪除用戶
+export interface DeleteUserRequest {
+  account: string;
+}
+
+export async function deleteUser(payload: DeleteUserRequest): Promise<{ message: string }> {
+  return apiCall<{ message: string }>('/deleteUser', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+// 18. 機器控制
+export interface MachineControlRequest {
+  company: string;
+  machine: string;
+}
+
+export async function machineOn(payload: MachineControlRequest): Promise<any> {
+  return apiCall<any>('/machineOn', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function machineOff(payload: MachineControlRequest): Promise<any> {
+  return apiCall<any>('/machineOff', {
+    method: 'POST',
+    body: JSON.stringify(payload)
   });
 }

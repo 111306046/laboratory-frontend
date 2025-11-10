@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Search, UserPlus, Shield, Edit, Trash2, Eye, ChevronDown, Filter } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Search, UserPlus, Shield, Edit, Trash2, Eye } from 'lucide-react';
 import { 
   getPermissionOptions, 
   validatePermissions, 
   isValidPermission,
   type Permission 
 } from '../utils/permissions';
-import { getLabs, type LabInfo } from '../services/api';
+import { getLabs, type LabInfo, deleteUser as deleteUserAPI } from '../services/api';
 
 // 定義用戶介面 - 根據後端API結構調整
 interface User {
@@ -339,12 +339,6 @@ const AdminManagement = () => {
       
       const labArray = newUser.lab;
       
-      // 驗證實驗室名稱對應的實驗室是否都屬於該公司
-      const labDetails = labArray.map(labName => {
-        const lab = labs.find(l => l.name === labName);
-        return lab;
-      }).filter(Boolean);
-      
       // 最後一次驗證：確保所有實驗室都屬於該公司
       const invalidLabs = labArray.filter(labName => {
         const lab = labs.find(l => l.name === labName);
@@ -420,10 +414,18 @@ const AdminManagement = () => {
   };
 
   // 刪除用戶
-  const deleteUser = (account: string) => {
+  const deleteUser = async (account: string) => {
     if (window.confirm('確定要刪除此用戶嗎？')) {
-      // 注意：後端API文檔中沒有刪除用戶的API，這裡只是從前端狀態中移除
-      setUsers(users.filter(user => user.account !== account));
+      try {
+        await deleteUserAPI({ account }); // 調用後端 API
+        setUsers(users.filter(user => user.account !== account));
+        alert('用戶刪除成功');
+        // 重新獲取用戶列表以確保數據同步
+        await fetchUsers();
+      } catch (error) {
+        alert('刪除失敗: ' + (error instanceof Error ? error.message : '未知錯誤'));
+        console.error('刪除用戶失敗:', error);
+      }
     }
   };
 

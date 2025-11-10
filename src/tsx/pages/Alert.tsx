@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Bell, Settings, Save, AlertTriangle, CheckCircle, XCircle, Wifi, WifiOff, RefreshCw } from 'lucide-react';
-import { generateBindingCode, getThresholdBySensor, setThresholds, getLabs, deleteThresholds } from '../services/api';
+import { generateBindingCode, getThresholdBySensor, setThresholds } from '../services/api';
 
 // 警報介面定義
 interface AlertItem {
@@ -92,130 +92,16 @@ const Alert = () => {
     }
   };
 
-  // 當前用戶的 lab 信息（從 API 獲取）
-  const [userLab, setUserLab] = useState<string | null>(null);
-  // 當前用戶的 sensor 信息（從 API 獲取）
-  const [userSensor, setUserSensor] = useState<string | null>(null);
-  
-  // 從 API 獲取當前用戶的 lab 和 sensor 信息
-  // 注意：lab 信息存儲在實驗室數據中，不是用戶數據中
-  // 需要從所有實驗室中查找包含該用戶的實驗室
-  const fetchUserLab = async () => {
-    try {
-      const userAccount = localStorage.getItem('user_account');
-      if (!userAccount) {
-        return;
-      }
-      
-      // 獲取所有實驗室列表
-      const labs = await getLabs();
-      
-      // 查找包含該用戶的實驗室
-      // 後端的 lab 數據結構中應該有 users 或 accounts 字段來存儲用戶列表
-      // 遍歷所有實驗室，查找包含當前用戶帳號的實驗室
-      let foundLab: string | null = null;
-      let foundSensor: string | null = null;
-      
-      for (const lab of labs) {
-        // 檢查 lab 數據中是否包含該用戶
-        // 可能的字段名稱：users, accounts, user_accounts 等
-        const labData = lab as any; // 使用 any 以訪問可能存在的字段
-        
-        // 檢查各種可能的用戶字段
-        if (labData.users && Array.isArray(labData.users)) {
-          if (labData.users.includes(userAccount)) {
-            foundLab = lab.name;
-            // 從 lab 的 sensors 數組中獲取第一個 sensor 的 name
-            if (lab.sensors && Array.isArray(lab.sensors) && lab.sensors.length > 0) {
-              foundSensor = lab.sensors[0].name;
-            }
-            break;
-          }
-        } else if (labData.accounts && Array.isArray(labData.accounts)) {
-          if (labData.accounts.includes(userAccount)) {
-            foundLab = lab.name;
-            // 從 lab 的 sensors 數組中獲取第一個 sensor 的 name
-            if (lab.sensors && Array.isArray(lab.sensors) && lab.sensors.length > 0) {
-              foundSensor = lab.sensors[0].name;
-            }
-            break;
-          }
-        } else if (labData.user_accounts && Array.isArray(labData.user_accounts)) {
-          if (labData.user_accounts.includes(userAccount)) {
-            foundLab = lab.name;
-            // 從 lab 的 sensors 數組中獲取第一個 sensor 的 name
-            if (lab.sensors && Array.isArray(lab.sensors) && lab.sensors.length > 0) {
-              foundSensor = lab.sensors[0].name;
-            }
-            break;
-          }
-        }
-      }
-      
-      if (foundLab) {
-        // 直接使用後端返回的實驗室名稱，不做任何轉換
-        console.log('✅ fetchUserLab: 找到用戶的 lab:', foundLab, 'sensor:', foundSensor);
-        setUserLab(foundLab);
-        if (foundSensor) {
-          setUserSensor(foundSensor);
-        }
-      } else {
-        console.warn('⚠️ fetchUserLab: 在所有實驗室中找不到該用戶，帳號:', userAccount);
-        console.warn('  實驗室列表:', labs.map(l => ({ name: l.name, company: l.company })));
-        // 如果找不到，嘗試使用 localStorage 中的值作為後備
-        const fallbackLab = localStorage.getItem('user_lab') || localStorage.getItem('company_lab');
-        if (fallbackLab) {
-          try {
-            const parsed = JSON.parse(fallbackLab);
-            const labValue = Array.isArray(parsed) ? parsed[0] : parsed;
-            if (labValue && typeof labValue === 'string') {
-              setUserLab(labValue);
-            }
-          } catch {
-            if (typeof fallbackLab === 'string') {
-              setUserLab(fallbackLab);
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('❌ 獲取用戶 lab 信息失敗:', error);
-    }
-  };
-  
-  // 獲取 sensor 名稱（優先級：從 API 獲取的 userSensor > localStorage 中的 machine > 默認值 "aq"）
-  const getUserSensor = (): string => {
-    // 首先使用從 API 獲取的 sensor
-    if (userSensor) {
-      return userSensor;
-    }
-    
-    // 其次嘗試從 localStorage 中的 machine 獲取
-    const machine = localStorage.getItem('machine');
-    if (machine) {
-      return machine;
-    }
-    
-    // 最後使用默認值
-    return 'aq';
-  };
-  
-  // 獲取用戶的 lab 信息（優先級：從 API 獲取的 userLab > localStorage 中的 user_lab > company_lab > 默認值）
+  // 簡化：直接從 localStorage 獲取 lab 和 sensor 信息（登入時已保存）
+  // 獲取用戶的 lab 信息（優先級：user_lab > company_lab > 從 company 推導）
   const getUserLab = (): string => {
-    // 首先使用從 API 獲取的 lab
-    if (userLab) {
-      console.log('✅ getUserLab: 使用從 API 獲取的 userLab:', userLab);
-      return userLab;
-    }
-    
-    // 其次嘗試從 localStorage 中的 user_lab 獲取
+    // 優先使用 user_lab（登入時後端返回）
     try {
       const userLabStr = localStorage.getItem('user_lab');
       if (userLabStr) {
-        const parsedLab = JSON.parse(userLabStr);
-        const labValue = Array.isArray(parsedLab) ? parsedLab[0] : parsedLab;
+        const parsed = JSON.parse(userLabStr);
+        const labValue = Array.isArray(parsed) ? parsed[0] : parsed;
         if (labValue && typeof labValue === 'string') {
-          console.log('⚠️ getUserLab: 使用 localStorage 中的 user_lab:', labValue);
           return labValue;
         }
       }
@@ -223,21 +109,21 @@ const Alert = () => {
       // 忽略解析錯誤
     }
     
-    // 再次嘗試從 company_lab 獲取
+    // 後備：使用 company_lab（移除 _lab 後綴）
     const companyLab = localStorage.getItem('company_lab');
     if (companyLab) {
-      console.log('⚠️ getUserLab: 使用 localStorage 中的 company_lab:', companyLab);
-      console.log('⚠️ 這可能導致 lab 名稱大小寫不匹配！請確保 fetchUserLab 正確執行並設置 userLab state');
-      return companyLab;
+      return companyLab.replace(/_lab$/i, '');
     }
     
-    // 最後使用默認值（不應該發生，因為應該已經從 API 獲取）
-    console.error('❌ getUserLab: 未找到 lab 信息，使用默認值 nccu_lab');
-    console.error('  這不應該發生！請檢查：');
-    console.error('  1. 後端 /getUsers API 是否返回用戶的 lab 字段');
-    console.error('  2. 用戶帳號是否正確保存在 localStorage (user_account)');
-    console.error('  3. fetchUserLab 函數是否成功執行');
-    return 'nccu_lab';
+    // 最後後備：從 company 推導
+    const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
+    return company.toLowerCase().replace(/\s+/g, '_');
+  };
+  
+  // 獲取機器類型（sensor），用於後端 API 的 sensor 參數
+  const getUserSensor = (): string => {
+    // 可以從 localStorage 獲取，或使用默認值
+    return localStorage.getItem('machine') || 'aq';
   };
 
   // 載入警報設定
@@ -260,9 +146,7 @@ const Alert = () => {
       console.log('📤 loadAlerts: 發送 getThresholdBySensor 請求:', {
         company,
         lab,
-        machineType,
-        userLabState: userLab, // 顯示 userLab state 的值
-        userSensorState: userSensor // 顯示 userSensor state 的值
+        sensor: machineType // sensor 是機器類型，如 "aq"
       });
       
       // 調用一次 API 獲取所有檢測項目的閾值
@@ -361,33 +245,9 @@ const Alert = () => {
 
   // 組件載入時執行
   useEffect(() => {
-    // 首先獲取用戶的 lab 信息
-    fetchUserLab();
+    loadAlerts();
     loadNotifications();
   }, []);
-  
-  // 當 userLab 更新時，重新載入警報設定
-  useEffect(() => {
-    if (userLab) {
-      loadAlerts();
-    } else {
-      // 如果還沒有 userLab，嘗試使用 localStorage 中的值載入（作為後備）
-      const fallbackLab = localStorage.getItem('user_lab') || localStorage.getItem('company_lab');
-      if (fallbackLab) {
-        try {
-          const parsedLab = JSON.parse(fallbackLab);
-          const labValue = Array.isArray(parsedLab) ? parsedLab[0] : parsedLab;
-          if (labValue && typeof labValue === 'string') {
-            loadAlerts();
-          }
-        } catch {
-          if (typeof fallbackLab === 'string') {
-            loadAlerts();
-          }
-        }
-      }
-    }
-  }, [userLab]);
 
   // 倒數計時效果
   useEffect(() => {
@@ -426,9 +286,30 @@ const Alert = () => {
         enabled: updated.enabled
       });
       
+      // 先獲取當前的所有閾值，確保不會覆蓋其他感測器的設置
+      let currentThresholds: any = null;
+      try {
+        const currentResult = await getThresholdBySensor({ company, lab, sensor: machineType });
+        if (currentResult && currentResult.threshold) {
+          currentThresholds = currentResult.threshold;
+          console.log('📥 獲取當前閾值:', currentThresholds);
+        }
+      } catch (e) {
+        console.warn('⚠️ 獲取當前閾值失敗，將只更新目標感測器:', e);
+      }
+      
       // machineType 是檢測器機器類型（從 API 獲取，如 "aq"）
       // updated.parameter 是檢測項目類型（如 "temperature", "co2", "pm25" 等）
-      await setThresholds({ company, lab, sensor: machineType, sensorType: updated.parameter, min: updated.minValue, max: updated.maxValue, enabled: updated.enabled });
+      // 傳入 currentThresholds 以保留其他感測器的設置
+      await setThresholds({ 
+        company, 
+        lab, 
+        sensor: machineType, 
+        sensorType: updated.parameter, 
+        min: updated.minValue, 
+        max: updated.maxValue, 
+        enabled: updated.enabled 
+      }, currentThresholds);
       
       // 等待一小段時間，確保後端數據已更新
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -461,8 +342,21 @@ const Alert = () => {
       }
       
       const machineType = getUserSensor(); // 從 API 獲取檢測器機器類型（如 "aq"）
+      
+      // 先獲取當前的所有閾值，確保不會覆蓋其他感測器的設置
+      let currentThresholds: any = null;
+      try {
+        const currentResult = await getThresholdBySensor({ company, lab, sensor: machineType });
+        if (currentResult && currentResult.threshold) {
+          currentThresholds = currentResult.threshold;
+        }
+      } catch (e) {
+        // 獲取當前閾值失敗，將只新增目標感測器
+      }
+      
       // machineType 是檢測器機器類型（從 API 獲取，如 "aq"）
       // newAlertSensor 是檢測項目類型（從 availableSensors 選擇，如 "temperature", "co2" 等）
+      // 傳入 currentThresholds 以保留其他感測器的設置
       await setThresholds({
         company,
         lab,
@@ -471,7 +365,7 @@ const Alert = () => {
         min: newAlertMin,
         max: newAlertMax,
         enabled: true
-      });
+      }, currentThresholds);
       
       // 關閉模態框並重置表單
       setShowAddAlertModal(false);
@@ -487,18 +381,29 @@ const Alert = () => {
     }
   };
   
-  // 刪除警報設定
-  const handleDeleteAlert = async (sensor: string) => {
+  // 刪除警報設定（將特定感測器的閾值設為 null，實現刪除效果）
+  const handleDeleteAlert = async (sensorType: string) => {
     try {
       const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
       const lab = getUserLab();
+      const machineType = getUserSensor(); // 機器類型，如 "aq"
       
       if (!lab) {
         setError('無法獲取 lab 信息，無法刪除警報設定');
         return;
       }
       
-      await deleteThresholds({ company, lab, sensor });
+      // 將特定感測器的閾值設為 null，實現刪除效果
+      // 注意：sensor 參數是機器類型，sensorType 是感測器類型
+      await setThresholds({
+        company,
+        lab,
+        sensor: machineType,      // 機器類型，如 "aq"
+        sensorType: sensorType,   // 感測器類型，如 "temperature"
+        min: null,
+        max: null,
+        enabled: false
+      });
       
       // 重新載入警報列表
       await loadAlerts();
@@ -510,24 +415,13 @@ const Alert = () => {
 
   // 通知設定已簡化為 LINE 專用，此函數保留以相容既有結構
 
+  // 保存設置（所有設置已經通過 updateAlert 實時保存，這裡只顯示提示）
   const saveSettings = async () => {
-    try {
-      setSaving(true);
-      
-      await apiCall('/alerts/bulk', {
-        method: 'PUT',
-        body: JSON.stringify({ alerts, notifications })
-      });
-      
-      setShowSaveModal(true);
-      setLastSync(new Date());
-      setTimeout(() => setShowSaveModal(false), 2000);
-    } catch (error) {
-      console.error('保存設定失敗:', error);
-      setError('保存失敗，請稍後再試');
-    } finally {
-      setSaving(false);
-    }
+    // 所有警報設置已經通過 updateAlert 函數實時保存到後端
+    // 這裡只需要顯示成功提示
+    setShowSaveModal(true);
+    setLastSync(new Date());
+    setTimeout(() => setShowSaveModal(false), 2000);
   };
 
   const refreshData = () => {

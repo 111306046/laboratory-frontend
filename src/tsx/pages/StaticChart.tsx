@@ -379,7 +379,7 @@ const StaticChart: React.FC = () => {
         };
         
         setData(fallbackData);
-        setSuccessMessage('使用模擬數據顯示圖表（API 連接失敗）');
+        // 不顯示「使用模擬數據」提示，靜默回退
       } finally {
         setIsLoading(false);
       }

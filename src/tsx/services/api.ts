@@ -1093,6 +1093,27 @@ export async function getCompany(): Promise<string[]> {
   return apiCall<string[]>('/getCompany');
 }
 
+// 15.1 依公司名稱查詢詳細資訊（需要後端權限）
+export interface CompanyDetail {
+  company: string;
+  extra_auth: boolean;
+  IP: string;
+}
+
+export async function getCompanyByName(company: string): Promise<CompanyDetail> {
+  // 後端實作路徑可能是 /getCompanyByName（駝峰），為相容性先嘗試駝峰，再回退底線版本
+  const query = new URLSearchParams({ company }).toString();
+  try {
+    return await apiCall<CompanyDetail>(`/getCompanyByName?${query}`);
+  } catch (e: any) {
+    // 404 時再嘗試另一個路徑命名
+    if (typeof e?.message === 'string' && (e.message.includes('404') || e.message.includes('端點不存在'))) {
+      return apiCall<CompanyDetail>(`/get_companyByName?${query}`);
+    }
+    throw e;
+  }
+}
+
 // 15. 刪除公司
 export interface DeleteCompanyRequest {
   company: string;

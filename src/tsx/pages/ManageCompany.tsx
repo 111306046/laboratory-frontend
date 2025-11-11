@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { manageCompany, getCompany, deleteCompany } from '../services/api';
-import { Trash2, Building2, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
+import { manageCompany, getCompany, deleteCompany, getCompanyByName, type CompanyDetail } from '../services/api';
+import { Trash2, Building2, RefreshCw, CheckCircle, XCircle, Search } from 'lucide-react';
 
 const ManageCompany: React.FC = () => {
   // 右側表單狀態
@@ -16,6 +16,11 @@ const ManageCompany: React.FC = () => {
   const [loadingCompanies, setLoadingCompanies] = useState(false);
   const [deletingCompany, setDeletingCompany] = useState<string | null>(null);
   const [editingCompanyName, setEditingCompanyName] = useState<string | null>(null);
+
+  // 查詢公司詳情
+  const [queryName, setQueryName] = useState('');
+  const [queryResult, setQueryResult] = useState<CompanyDetail | null>(null);
+  const [queryLoading, setQueryLoading] = useState(false);
 
   // 獲取公司列表
   const fetchCompanies = async () => {
@@ -54,6 +59,28 @@ const ManageCompany: React.FC = () => {
     setIp('');
     setEditingCompanyName(null);
     setMessage(null);
+  };
+
+  // 依公司名稱查詢詳細資訊
+  const handleQueryCompany = async () => {
+    try {
+      if (!queryName) {
+        setMessage('請輸入欲查詢的公司名稱');
+        setMessageType('error');
+        return;
+      }
+      setQueryLoading(true);
+      setQueryResult(null);
+      const detail = await getCompanyByName(queryName);
+      setQueryResult(detail);
+      setMessage(null);
+    } catch (err: any) {
+      setQueryResult(null);
+      setMessage(err?.message || '查詢公司資訊失敗（可能權限不足）');
+      setMessageType('error');
+    } finally {
+      setQueryLoading(false);
+    }
   };
 
   // 刪除公司
@@ -223,8 +250,8 @@ const ManageCompany: React.FC = () => {
           )}
         </div>
 
-        {/* 右側：建立/管理公司表單 */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        {/* 右側：建立/管理公司表單 + 查詢公司詳情 */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">
               {editingCompanyName ? `編輯公司: ${editingCompanyName}` : '新增/更新公司'}
@@ -286,6 +313,54 @@ const ManageCompany: React.FC = () => {
               {loading ? '送出中...' : '送出'}
             </button>
           </form>
+
+          {/* 依名稱查詢公司詳情 */}
+          <div className="border-t pt-4">
+            <h3 className="text-lg font-semibold mb-3">查詢公司詳情</h3>
+            <div className="flex items-center gap-2 mb-3">
+              <input
+                type="text"
+                value={queryName}
+                onChange={(e) => setQueryName(e.target.value)}
+                className="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="輸入公司名稱（需具備 superuser 權限）"
+              />
+              <button
+                type="button"
+                onClick={handleQueryCompany}
+                disabled={queryLoading}
+                className="px-3 py-2 bg-gray-800 text-white rounded hover:bg-gray-900 disabled:opacity-60 flex items-center gap-1"
+              >
+                <Search className="w-4 h-4" />
+                查詢
+              </button>
+            </div>
+            {queryResult && (
+              <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded p-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div><span className="text-gray-500">公司：</span>{queryResult.company}</div>
+                  <div><span className="text-gray-500">extra_auth：</span>{String(queryResult.extra_auth)}</div>
+                  <div><span className="text-gray-500">IP：</span>{queryResult.IP || '-'}</div>
+                </div>
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompany(queryResult.company);
+                      setExtraAuth(!!queryResult.extra_auth);
+                      setIp(queryResult.IP || '');
+                      setEditingCompanyName(queryResult.company);
+                      setMessage('已載入查詢結果到編輯表單');
+                      setMessageType('info');
+                    }}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    載入到編輯表單
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

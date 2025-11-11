@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Bell, Settings, Save, AlertTriangle, CheckCircle, XCircle, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { generateBindingCode, getThresholdBySensor, setThresholds } from '../services/api';
+import botQR from '../../assets/bot QR.png';
 
 // 警報介面定義
 interface AlertItem {
@@ -45,10 +46,7 @@ const Alert = () => {
   // LINE 官方帳號連結（可由 .env 設定 VITE_LINE_ACCOUNT_URL）
   const lineAccountUrl =
     (import.meta as any).env?.VITE_LINE_ACCOUNT_URL ||
-    'https://line.me/R/ti/p/@youraccount';
-  const lineQrSrc = `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(
-    lineAccountUrl
-  )}`;
+    'https://line.me/R/ti/p/@933ncchb';
   // 綁定狀態（若已綁定，顯示「已綁定完成」）
   const [isBound, setIsBound] = useState<boolean>(() => {
     try {
@@ -708,7 +706,7 @@ const Alert = () => {
                 </p>
                 <div className="flex items-center gap-6 flex-wrap">
                   <img
-                    src={lineQrSrc}
+                    src={botQR}
                     alt="LINE 官方帳號 QR Code"
                     className="w-40 h-40 border rounded"
                   />

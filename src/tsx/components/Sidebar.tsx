@@ -196,30 +196,25 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       
       {/* 用戶資訊 */}
       <div className="p-4 border-t border-blue-700">
-        <div className="flex items-center">
-          <div className="flex-shrink-0">
-            <img 
-              className="h-10 w-10 rounded-full bg-blue-300" 
-              src="/avatar-placeholder.png" 
-              alt="User avatar" 
-            />
+        {sidebarOpen ? (
+          <div>
+            {isLoading ? (
+              <div className="animate-pulse space-y-2">
+                <div className="h-4 bg-blue-200 rounded w-24"></div>
+                <div className="h-3 bg-blue-200 rounded w-16"></div>
+              </div>
+            ) : (
+              <>
+                <p className="text-base font-medium">{userInfo.name}</p>
+                <p className="text-sm text-blue-200">{userInfo.role}</p>
+              </>
+            )}
           </div>
-          {sidebarOpen && (
-            <div className="ml-3">
-              {isLoading ? (
-                <div className="animate-pulse">
-                  <div className="h-4 bg-blue-200 rounded w-16 mb-1"></div>
-                  <div className="h-3 bg-blue-200 rounded w-12"></div>
-                </div>
-              ) : (
-                <>
-                  <p className="text-base font-medium">{userInfo.name}</p>
-                  <p className="text-sm text-blue-200">{userInfo.role}</p>
-                </>
-              )}
-            </div>
-          )}
-        </div>
+        ) : (
+          <div className="text-center text-sm font-semibold text-blue-100">
+            {isLoading ? '...' : (userInfo.name?.charAt(0)?.toUpperCase() || 'U')}
+          </div>
+        )}
         
         {/* 登出按鈕 */}
         <button 

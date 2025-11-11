@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Calendar, Download, RefreshCw, Database, AlertTriangle, CheckCircle, XCircle, Wifi, WifiOff } from 'lucide-react';
+import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts';
 import { getRecentData, searchData, SensorData, ExcelResponse, downloadExcelFile, parseExcelToSensorData, formatDateTime } from '../services/api';
 
 // 使用從 API 服務導入的 SensorData 介面
@@ -33,6 +34,7 @@ const DataRecords: React.FC = () => {
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [itemsPerPage] = useState<number>(20);
+  const [queryVersion, setQueryVersion] = useState<number>(0);
   
   // 初始化為顯示最近數據（不設置日期範圍）
   useEffect(() => {
@@ -41,8 +43,33 @@ const DataRecords: React.FC = () => {
     setEndDate('');
   }, []);
 
-  // 獲取數據記錄
+  const handleSearch = () => {
+    // 驗證日期
+    if (startDate && endDate) {
+      const [sY, sM, sD] = startDate.split('-').map(Number);
+      const [eY, eM, eD] = endDate.split('-').map(Number);
+      const startDt = new Date(sY, (sM || 1) - 1, sD || 1);
+      const endDt = new Date(eY, (eM || 1) - 1, eD || 1);
+      if (startDt.getTime() > endDt.getTime()) {
+        setError('開始日期不能晚於結束日期');
+        return;
+      }
+    }
+    setCurrentPage(1);
+    setError('');
+    setSuccessMessage('');
+    setQueryVersion((v) => v + 1);
+  };
+
+  // 初次載入立即查詢最近資料
   useEffect(() => {
+    handleSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 獲取數據記錄（每次點擊搜尋或相關依賴變動）
+  useEffect(() => {
+    if (queryVersion === 0) return;
     const fetchDataRecords = async () => {
       try {
         setIsLoading(true);
@@ -146,7 +173,8 @@ const DataRecords: React.FC = () => {
     };
     
     fetchDataRecords();
-  }, [currentPage, selectedCompanyLab, selectedMachine, dataCount, startDate, endDate, dateRange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryVersion, selectedCompanyLab, selectedMachine, dataCount, returnFormat]);
   
   // 導出 CSV 功能
   const exportToCSV = () => {
@@ -172,6 +200,7 @@ const DataRecords: React.FC = () => {
     setCurrentPage(1);
     setError('');
     setSuccessMessage('');
+    handleSearch();
   };
 
   // 顯示最近數據（清除日期範圍）
@@ -180,6 +209,7 @@ const DataRecords: React.FC = () => {
     setEndDate('');
     setDateRange('custom');
     setCurrentPage(1);
+    handleSearch();
   };
   
   // 狀態樣式（保留以備將來使用）
@@ -263,9 +293,36 @@ const DataRecords: React.FC = () => {
   };
   
   // 計算總頁數
-  const totalPages = Math.ceil(records.length / itemsPerPage);
+  const totalPages = Math.ceil(records.length / itemsPerPage) || 1;
   const pageStartIndex = (currentPage - 1) * itemsPerPage;
   const pagedRecords = records.slice(pageStartIndex, pageStartIndex + itemsPerPage);
+
+  const summary = useMemo(() => {
+    if (records.length === 0) return null;
+    const co2Values = records.map(r => r.co2);
+    const humidityValues = records.map(r => r.humidity);
+    const latestTimestamp = records[0]?.timestamp;
+    const oldestTimestamp = records[records.length - 1]?.timestamp;
+    const avg = (arr: number[]) => (arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0);
+    return {
+      total: records.length,
+      avgCO2: Math.round(avg(co2Values)),
+      avgHumidity: Math.round(avg(humidityValues) * 10) / 10,
+      latest: latestTimestamp,
+      oldest: oldestTimestamp
+    };
+  }, [records]);
+
+  const trendData = useMemo(() => {
+    if (records.length === 0) return [];
+    const copy = [...records].reverse(); // 由舊到新
+    return copy.slice(-50).map((r) => ({
+      time: new Date(r.timestamp).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }),
+      co2: r.co2,
+      pm25: r.pm25,
+      humidity: r.humidity
+    }));
+  }, [records]);
 
   if (isLoading && records.length === 0) {
     return (
@@ -305,14 +362,24 @@ const DataRecords: React.FC = () => {
                 <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
               </button>
               
-              <button
-                onClick={exportToCSV}
-                className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
-                disabled={records.length === 0}
-              >
-                <Download className="w-4 h-4 mr-2" />
-                導出 CSV
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSearch}
+                  className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                  disabled={isLoading}
+                >
+                  <Search className="w-4 h-4 mr-2" />
+                  搜尋
+                </button>
+                <button
+                  onClick={exportToCSV}
+                  className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+                  disabled={records.length === 0}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  導出 CSV
+                </button>
+              </div>
               
               <div className="flex items-center gap-2">
                 {connectionStatus === 'connected' ? (
@@ -390,6 +457,44 @@ const DataRecords: React.FC = () => {
           )}
         </div>
 
+        {/* 統計摘要與趨勢 */}
+        {summary && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <div className="bg-white rounded-lg shadow-lg p-5">
+              <h3 className="text-sm font-medium text-gray-500 mb-2">總筆數</h3>
+              <p className="text-2xl font-semibold text-gray-900">{summary.total}</p>
+              <p className="text-xs text-gray-500 mt-2">
+                範圍：{summary.oldest ? new Date(summary.oldest).toLocaleString('zh-TW') : '--'} 至{' '}
+                {summary.latest ? new Date(summary.latest).toLocaleString('zh-TW') : '--'}
+              </p>
+            </div>
+            <div className="bg-white rounded-lg shadow-lg p-5">
+              <h3 className="text-sm font-medium text-gray-500 mb-2">平均 CO₂ (ppm)</h3>
+              <p className="text-2xl font-semibold text-blue-600">{summary.avgCO2}</p>
+              <h3 className="text-sm font-medium text-gray-500 mt-4 mb-2">平均濕度 (%)</h3>
+              <p className="text-xl font-semibold text-emerald-600">{summary.avgHumidity}</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-lg p-5">
+              <h3 className="text-sm font-medium text-gray-500 mb-3">快速趨勢 (最近 50 筆)</h3>
+              {trendData.length > 0 ? (
+                <div className="h-32">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={trendData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                      <XAxis dataKey="time" hide />
+                      <YAxis hide />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="co2" stroke="#3B82F6" dot={false} strokeWidth={2} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">無足夠資料顯示趨勢</p>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* 搜索和篩選區域 */}
           <div className="lg:col-span-3">
@@ -441,6 +546,16 @@ const DataRecords: React.FC = () => {
                     }}
                     disabled={dateRange !== 'custom'}
                   />
+                  {startDate && dateRange === 'custom' && (
+                    <button
+                      type="button"
+                      onClick={() => setStartDate('')}
+                      className="absolute right-3 top-2 text-gray-400 hover:text-gray-600 text-sm"
+                      title="清除開始日期"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
                 
                 {/* 結束日期 */}
@@ -456,6 +571,16 @@ const DataRecords: React.FC = () => {
                     }}
                     disabled={dateRange !== 'custom'}
                   />
+                  {endDate && dateRange === 'custom' && (
+                    <button
+                      type="button"
+                      onClick={() => setEndDate('')}
+                      className="absolute right-3 top-2 text-gray-400 hover:text-gray-600 text-sm"
+                      title="清除結束日期"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
                 
                 {/* 狀態篩選 */}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Calendar, Download, RefreshCw, Database, AlertTriangle, CheckCircle, XCircle, Wifi, WifiOff } from 'lucide-react';
-import { getRecentData, searchData, SensorData, ExcelResponse, downloadExcelFile, parseExcelToSensorData } from '../services/api';
+import { getRecentData, searchData, SensorData, ExcelResponse, downloadExcelFile, parseExcelToSensorData, formatDateTime } from '../services/api';
 
 // 使用從 API 服務導入的 SensorData 介面
 type DataRecord = SensorData & { id: string };
@@ -52,9 +52,13 @@ const DataRecords: React.FC = () => {
         let data: SensorData[] = [];
         
         if (startDate && endDate) {
-          // API 需要完整時間格式 YYYY-MM-DD HH:MM:SS
-          const startWithTime = `${startDate} 00:00:00`;
-          const endWithTime = `${endDate} 23:59:59`;
+          // 使用本地時區 Date 生成，再以 formatDateTime 格式化，避免跨時區偏移
+          const [sY, sM, sD] = startDate.split('-').map(Number);
+          const [eY, eM, eD] = endDate.split('-').map(Number);
+          const startDt = new Date(sY, (sM || 1) - 1, sD || 1, 0, 0, 0);
+          const endDt = new Date(eY, (eM || 1) - 1, eD || 1, 23, 59, 59);
+          const startWithTime = formatDateTime(startDt);
+          const endWithTime = formatDateTime(endDt);
           // 使用搜索 API - 可能返回 Excel 文件
           const searchResult = await searchData({
             company_lab: selectedCompanyLab,

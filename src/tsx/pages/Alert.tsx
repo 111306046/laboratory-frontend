@@ -11,7 +11,6 @@ interface AlertItem {
   minValue: number;
   maxValue: number;
   enabled: boolean;
-  priority: string;
 }
 
 interface NotificationSettings {
@@ -43,6 +42,21 @@ const Alert = () => {
   const [bindingExpiresAt, setBindingExpiresAt] = useState<number | null>(null);
   const [bindingCountdown, setBindingCountdown] = useState<number>(0);
   const [bindingLoading, setBindingLoading] = useState<boolean>(false);
+  // LINE 官方帳號連結（可由 .env 設定 VITE_LINE_ACCOUNT_URL）
+  const lineAccountUrl =
+    (import.meta as any).env?.VITE_LINE_ACCOUNT_URL ||
+    'https://line.me/R/ti/p/@youraccount';
+  const lineQrSrc = `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(
+    lineAccountUrl
+  )}`;
+  // 綁定狀態（若已綁定，顯示「已綁定完成」）
+  const [isBound, setIsBound] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('line_bound') === 'true';
+    } catch {
+      return false;
+    }
+  });
   
   // 新增警報設定相關狀態
   const [showAddAlertModal, setShowAddAlertModal] = useState(false);
@@ -207,7 +221,6 @@ const Alert = () => {
               minValue: typeof sensorThreshold.min === 'number' ? sensorThreshold.min : 0,
               maxValue: typeof sensorThreshold.max === 'number' ? sensorThreshold.max : 0,
               enabled: typeof sensorThreshold.enabled === 'boolean' ? sensorThreshold.enabled : true,
-              priority: 'medium'
             });
           }
         }
@@ -435,6 +448,13 @@ const Alert = () => {
       setBindingLoading(true);
       setError(null);
       const res = await generateBindingCode();
+      // 若後端回傳已綁定完成，直接標記狀態
+      if (res?.message && res.message.includes('已綁定完成')) {
+        setIsBound(true);
+        try {
+          localStorage.setItem('line_bound', 'true');
+        } catch {}
+      }
       if (res.binding_code) {
         setBindingCode(res.binding_code);
         // 有些後端會在插入時設定 5 分鐘，這裡用前端 5 分鐘倒數作為視覺提示
@@ -483,14 +503,7 @@ const Alert = () => {
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch(priority) {
-      case 'high': return 'bg-red-100 text-red-800 border-red-200';
-      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'low': return 'bg-green-100 text-green-800 border-green-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
+  // 已移除優先級功能
 
   if (loading) {
     return (
@@ -601,12 +614,7 @@ const Alert = () => {
                         </button>
                         <div>
                           <h3 className="font-medium text-gray-900">{alert.name}</h3>
-                          {alert.enabled ? (
-                            <span className={`inline-block px-2 py-1 text-xs rounded-full border ${getPriorityColor(alert.priority)}`}>
-                              {alert.priority === 'high' ? '高優先級' : 
-                               alert.priority === 'medium' ? '中優先級' : '低優先級'}
-                            </span>
-                          ) : (
+                          {!alert.enabled && (
                             <span className="inline-block px-2 py-1 text-xs rounded-full border bg-gray-100 text-gray-600 border-gray-200">
                               已停用
                             </span>
@@ -615,16 +623,6 @@ const Alert = () => {
                       </div>
                       
                       <div className="flex items-center gap-2">
-                        <select
-                          value={alert.priority}
-                          onChange={(e) => updateAlert(alert.id, 'priority', e.target.value)}
-                          className="border rounded px-2 py-1 text-sm"
-                          disabled={!alert.enabled}
-                        >
-                          <option value="low">低優先級</option>
-                          <option value="medium">中優先級</option>
-                          <option value="high">高優先級</option>
-                        </select>
                         <button
                           onClick={() => handleDeleteAlert(alert.parameter)}
                           className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
@@ -672,17 +670,26 @@ const Alert = () => {
           <div className="space-y-6">
             {/* LINE 綁定區塊 */}
             <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">LINE 綁定</h3>
-              <p className="text-gray-600 text-sm mb-4">點擊產生綁定碼，5 分鐘內至 LINE 輸入以完成綁定。</p>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-semibold text-gray-900">LINE 綁定</h3>
+                {isBound && (
+                  <span className="inline-flex items-center gap-1 text-sm px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                    ✅ 已綁定完成
+                  </span>
+                )}
+              </div>
+              <p className="text-gray-600 text-sm mb-4">
+                {isBound ? '此帳號已完成 LINE 綁定，可接收通知。' : '點擊產生綁定碼，5 分鐘內至 LINE 輸入以完成綁定。'}
+              </p>
               <div className="flex items-center gap-3">
                 <button
                   onClick={handleGenerateBindingCode}
-                  disabled={bindingLoading}
+                  disabled={bindingLoading || isBound}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded"
                 >
                   {bindingLoading ? '產生中...' : '產生綁定碼'}
                 </button>
-                {bindingCode && (
+                {!isBound && bindingCode && (
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-gray-700">綁定碼：</span>
                     <span className="text-lg font-mono font-semibold tracking-wider">{bindingCode}</span>
@@ -690,9 +697,31 @@ const Alert = () => {
                   </div>
                 )}
               </div>
-              {bindingCode && bindingCountdown === 0 && (
+              {!isBound && bindingCode && bindingCountdown === 0 && (
                 <div className="mt-2 text-sm text-red-600">綁定碼已過期，請重新產生。</div>
               )}
+              {/* 官方 LINE 帳號連結與 QRCode */}
+              <div className="mt-6 border-t pt-6">
+                <h4 className="text-md font-semibold text-gray-900 mb-2">官方 LINE 帳號</h4>
+                <p className="text-gray-600 text-sm mb-4">
+                  掃描 QR Code 或點擊下方按鈕加入官方 LINE。
+                </p>
+                <div className="flex items-center gap-6 flex-wrap">
+                  <img
+                    src={lineQrSrc}
+                    alt="LINE 官方帳號 QR Code"
+                    className="w-40 h-40 border rounded"
+                  />
+                  <a
+                    href={lineAccountUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
+                  >
+                    前往加入 LINE
+                  </a>
+                </div>
+              </div>
             </div>
             {/* 通知方式設置（精簡為 LINE 專用） */}
             <div className="bg-white rounded-lg shadow-lg p-6">

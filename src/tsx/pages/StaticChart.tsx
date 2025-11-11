@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { BarChart3, RefreshCw, Calendar, Download, Wifi, WifiOff, CheckCircle, XCircle, AlertTriangle, TrendingUp, Activity, Thermometer } from 'lucide-react';
-import { getRecentData, SensorData } from '../services/api';
+import { searchData, SensorData, formatDateTime, parseExcelToSensorData } from '../services/api';
 
 // 統計數據介面
 interface StatisticsData {
@@ -74,6 +74,66 @@ const StaticChart: React.FC = () => {
     };
   };
 
+  // 工具：依小時分組（本地時區），回傳近 24 小時的平均值序列
+  const buildHourlySeries = (sensorData: SensorData[]) => {
+    // 依時間排序
+    const sorted = [...sensorData].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    const byHour = new Map<string, SensorData[]>();
+    sorted.forEach(d => {
+      const dt = new Date(d.timestamp);
+      const key = `${String(dt.getHours()).padStart(2, '0')}:00`;
+      const list = byHour.get(key) || [];
+      list.push(d);
+      byHour.set(key, list);
+    });
+    // 取最後 24 個小時鍵（以插入順序為準）
+    const keys = Array.from(byHour.keys());
+    const lastKeys = keys.slice(-24);
+    return lastKeys.map(k => {
+      const list = byHour.get(k) || [];
+      const avg = (arr: number[]) => (arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0);
+      return {
+        time: k,
+        co2: Math.round(avg(list.map(i => i.co2))),
+        humidity: Math.round(avg(list.map(i => i.humidity)) * 10) / 10,
+        temperature: Math.round(avg(list.map(i => i.temperatu)) * 10) / 10,
+        pm25: Math.round(avg(list.map(i => i.pm25)) * 10) / 10,
+        pm10: Math.round(avg(list.map(i => i.pm10)) * 10) / 10,
+        tvoc: Math.round(avg(list.map(i => i.tvoc)) * 1000) / 1000
+      };
+    });
+  };
+
+  // 工具：依日期分組（本地時區），回傳最近 7 天的各指標
+  const buildDailyTrends = (sensorData: SensorData[]) => {
+    const sorted = [...sensorData].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    const byDay = new Map<string, SensorData[]>();
+    sorted.forEach(d => {
+      const dt = new Date(d.timestamp);
+      const key = `${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+      const list = byDay.get(key) || [];
+      list.push(d);
+      byDay.set(key, list);
+    });
+    const keys = Array.from(byDay.keys());
+    const lastKeys = keys.slice(-7);
+    return lastKeys.map(k => {
+      const list = byDay.get(k) || [];
+      const nums = (sel: (d: SensorData) => number) => list.map(sel);
+      const avg = (arr: number[]) => (arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0);
+      const co2Arr = nums(d => d.co2);
+      return {
+        date: k,
+        avgCO2: Math.round(avg(co2Arr)),
+        maxCO2: Math.round(co2Arr.length ? Math.max(...co2Arr) : 0),
+        minCO2: Math.round(co2Arr.length ? Math.min(...co2Arr) : 0),
+        avgHumidity: Math.round(avg(nums(d => d.humidity)) * 10) / 10,
+        avgPM25: Math.round(avg(nums(d => d.pm25)) * 10) / 10,
+        avgTVOC: Math.round(avg(nums(d => d.tvoc)) * 1000) / 1000
+      };
+    });
+  };
+
   // 將原始數據轉換為圖表數據
   const processDataForCharts = (sensorData: SensorData[]): StatisticsData => {
     if (sensorData.length === 0) {
@@ -96,22 +156,8 @@ const StaticChart: React.FC = () => {
       };
     }
 
-    // 處理時間序列數據（模擬24小時數據）
-    const hourlyData = Array.from({ length: 24 }, (_, hour) => {
-      const baseIndex = hour % sensorData.length;
-      const item = sensorData[baseIndex];
-      const timeVariation = Math.sin((hour / 24) * Math.PI * 2) * 0.1; // 模擬日間變化
-      
-      return {
-        time: `${hour.toString().padStart(2, '0')}:00`,
-        co2: Math.round(item.co2 * (1 + timeVariation)),
-        humidity: Math.round(item.humidity * (1 + timeVariation * 0.5) * 10) / 10,
-        temperature: Math.round(item.temperatu * (1 + timeVariation * 0.3) * 10) / 10,
-        pm25: item.pm25,
-        pm10: item.pm10,
-        tvoc: Math.round(item.tvoc * (1 + timeVariation * 0.2) * 1000) / 1000
-      };
-    });
+    // 以實際資料建構 24 小時序列
+    const hourlyData = buildHourlySeries(sensorData);
 
     // 環境質量評估（基於多個參數）
     const total = sensorData.length;
@@ -167,22 +213,8 @@ const StaticChart: React.FC = () => {
       { name: '不良', value: Math.round(poor / total * 100), color: '#EF4444' }
     ];
 
-    // 處理每日趨勢（基於實際數據生成7天趨勢）
-    const dailyTrends = Array.from({ length: 7 }, (_, i) => {
-      const dayData = sensorData.slice(i * 2, (i + 1) * 2);
-      const baseData = dayData.length > 0 ? dayData[0] : sensorData[0];
-      const variation = Math.sin((i / 7) * Math.PI * 2) * 0.15; // 模擬週期變化
-      
-      return {
-        date: `${String(i + 1).padStart(2, '0')}-${String(16 + i).padStart(2, '0')}`,
-        avgCO2: Math.round(baseData.co2 * (1 + variation)),
-        maxCO2: Math.round(baseData.co2 * (1 + variation + 0.2)),
-        minCO2: Math.round(baseData.co2 * (1 + variation - 0.2)),
-        avgHumidity: Math.round(baseData.humidity * (1 + variation * 0.5) * 10) / 10,
-        avgPM25: Math.round(baseData.pm25 * (1 + variation) * 10) / 10,
-        avgTVOC: Math.round(baseData.tvoc * (1 + variation) * 1000) / 1000
-      };
-    });
+    // 最近 7 天趨勢（根據實際資料）
+    const dailyTrends = buildDailyTrends(sensorData);
 
     // 參數範圍統計（基於環境標準）
     const parameterRanges = [
@@ -260,12 +292,31 @@ const StaticChart: React.FC = () => {
         setError('');
         setSuccessMessage('');
 
-        // 使用真實 API 獲取數據
-        const sensorData = await getRecentData({
-          company_lab: 'nccu_lab',
-          machine: 'aq',
-          number: 50 // 獲取更多數據用於圖表
+        // 依時間範圍決定查詢起訖
+        const now = new Date();
+        const hours = selectedTimeRange === '30d' ? 24 * 30 : selectedTimeRange === '7d' ? 24 * 7 : 24;
+        const start = new Date(now.getTime() - hours * 60 * 60 * 1000);
+        const companyLab =
+          localStorage.getItem('company_lab') ||
+          localStorage.getItem('company')?.toLowerCase().replace(/\s+/g, '_') + '_lab' ||
+          'nccu_lab';
+        const machine = localStorage.getItem('machine') || 'aq';
+
+        // 使用區間查詢 API（後端期望 YYYY-MM-DD HH:MM:SS）
+        const result = await searchData({
+          company_lab: companyLab,
+          machine,
+          start: formatDateTime(start),
+          end: formatDateTime(now),
+          format: 'json'
         });
+        let sensorData: SensorData[];
+        if (result && typeof result === 'object' && 'type' in result) {
+          // 後端回傳 Excel，轉成 SensorData[]
+          sensorData = await parseExcelToSensorData(result);
+        } else {
+          sensorData = result as SensorData[];
+        }
 
         setRawData(sensorData);
         

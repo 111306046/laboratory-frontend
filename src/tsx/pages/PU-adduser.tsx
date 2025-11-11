@@ -26,6 +26,7 @@ interface NewUser {
   company: string;
   lab?: string[]; // 實驗室陣列，支援多個實驗室
   irole?: string;
+  allow_notify?: boolean; // 是否允許通知（影響是否顯示 set_thresholds / modify_notification）
 }
 
 const AdminManagement = () => {
@@ -46,7 +47,8 @@ const AdminManagement = () => {
     password: '',
     func_permissions: [],
     company: '',
-    lab: []
+    lab: [],
+    allow_notify: false
   });
 
   // 實驗室列表
@@ -108,17 +110,19 @@ const AdminManagement = () => {
   // 權限選項（用於手動調整）- 根據輸入的公司動態過濾
   // 在創建用戶時，根據 newUser.company 判斷
   // 在編輯用戶時，根據 editingUser.company 判斷
-  const getPermissionOptionsForCompany = (companyName?: string) => {
+  const getPermissionOptionsForCompany = (companyName?: string, allowNotifyOverride?: boolean) => {
     const companyHasExtraAuth = getCompanyExtraAuth(companyName || '');
-    const options = getPermissionOptions(companyHasExtraAuth);
+    // 只要公司有 extra_auth「或」此使用者啟用了通知功能，就開放 extra 權限項
+    const effectiveExtraAuth = companyHasExtraAuth || !!allowNotifyOverride;
+    const options = getPermissionOptions(effectiveExtraAuth);
     return options;
   };
   
   // 獲取創建用戶時的權限選項（根據輸入的公司動態計算）
   // 使用 useMemo 確保當公司名稱改變時重新計算
   const permissionOptions = useMemo(() => {
-    return getPermissionOptionsForCompany(newUser.company);
-  }, [newUser.company]);
+    return getPermissionOptionsForCompany(newUser.company, newUser.allow_notify);
+  }, [newUser.company, newUser.allow_notify]);
 
   // 獲取用戶列表
   const fetchUsers = async () => {
@@ -984,7 +988,7 @@ const AdminManagement = () => {
               權限 (根據角色自動分配，可手動調整)
             </label>
             <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-              {getPermissionOptionsForCompany(editingUser.company || '').map(option => (
+              {getPermissionOptionsForCompany(editingUser.company || '', editingUser.allow_notify).map(option => (
                 <label key={option.value} className="flex items-center">
                   <input
                     type="checkbox"

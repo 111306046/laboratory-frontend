@@ -30,6 +30,14 @@ const Home: React.FC = () => {
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
+  // 顏色判斷：紅=偏離正常，橘=接近邊界，綠=正常
+  const getStatusBorder = (value: number, min: number, max: number, nearMargin: number) => {
+    if (Number.isNaN(value)) return 'border-gray-300';
+    if (value < min || value > max) return 'border-red-500';
+    if (value <= min + nearMargin || value >= max - nearMargin) return 'border-orange-400';
+    return 'border-green-500';
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -197,21 +205,24 @@ const Home: React.FC = () => {
         
         {/* 主要數據顯示 - 圓形卡片 */}
         <div className="flex flex-wrap justify-around mb-6">
-          <div className="flex flex-col items-center justify-center w-64 h-64 rounded-full border-[15px] border-green-500 bg-gradient-to-t from-yellow-50 to-white m-4 shadow-lg">
+          {/* CO2：正常 0~1000，靠近邊界 ±100 */}
+          <div className={`flex flex-col items-center justify-center w-64 h-64 rounded-full border-[15px] ${getStatusBorder(labData.co2, 0, 1000, 100)} bg-gradient-to-t from-yellow-50 to-white m-4 shadow-lg`}>
             <div className="text-2xl font-bold text-center">
               CO₂<br />
               {isLoading ? '載入中...' : `${labData.co2} ppm`}
             </div>
           </div>
           
-          <div className="flex flex-col items-center justify-center w-64 h-64 rounded-full border-[15px] border-blue-400 bg-gradient-to-t from-yellow-50 to-white m-4 shadow-lg">
+          {/* 溫度：正常 18~25°C，靠近邊界 ±1°C */}
+          <div className={`flex flex-col items-center justify-center w-64 h-64 rounded-full border-[15px] ${getStatusBorder(labData.temperature, 18, 25, 1)} bg-gradient-to-t from-yellow-50 to-white m-4 shadow-lg`}>
             <div className="text-2xl font-bold text-center">
               溫度<br />
               {isLoading ? '載入中...' : `${labData.temperature} °C`}
             </div>
           </div>
           
-          <div className="flex flex-col items-center justify-center w-64 h-64 rounded-full border-[15px] border-purple-400 bg-gradient-to-t from-yellow-50 to-white m-4 shadow-lg">
+          {/* 濕度：正常 40~60%，靠近邊界 ±5% */}
+          <div className={`flex flex-col items-center justify-center w-64 h-64 rounded-full border-[15px] ${getStatusBorder(labData.humidity, 40, 60, 5)} bg-gradient-to-t from-yellow-50 to-white m-4 shadow-lg`}>
             <div className="text-2xl font-bold text-center">
               濕度<br />
               {isLoading ? '載入中...' : `${labData.humidity} %`}

@@ -135,20 +135,6 @@ async function refreshAccessToken(): Promise<string | null> {
         credentials: 'omit', // 不使用 credentials，避免 CORS 問題
       });
 
-      // 檢查是否為 CORS 錯誤
-      if (response.status === 0 || response.type === 'opaque') {
-        console.error('❌ CORS 錯誤：後端 /api/refresh 端點未正確配置 CORS');
-        console.error('請確認後端已配置以下 CORS 設置：');
-        console.error('  - Access-Control-Allow-Origin: * 或包含前端域名');
-        console.error('  - Access-Control-Allow-Methods: POST');
-        console.error('  - Access-Control-Allow-Headers: Content-Type');
-        // 清除認證資訊
-        localStorage.removeItem('token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user_account');
-        localStorage.removeItem('user_permissions');
-        return null;
-      }
 
       if (!response.ok) {
         // 嘗試讀取錯誤詳情

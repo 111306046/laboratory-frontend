@@ -9,7 +9,7 @@ export default defineConfig({
     // 保留代理配置作為備用
     proxy: {
       '/api': {
-        target: 'https://trochanteral-noncollusive-eunice.ngrok-free.dev',
+        target: 'https://group14.site',
         changeOrigin: true,
         secure: true,
         rewrite: (path) => path.replace(/^\/api/, '/api')

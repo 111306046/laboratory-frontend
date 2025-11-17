@@ -4,8 +4,8 @@
 // 開發環境使用代理避免 CORS 問題，生產環境使用完整 URL
 const API_BASE_URL = import.meta.env.DEV 
   ? '/api'  // 通過 Vite 代理（vite.config.ts 中已配置）
-  : 'https://trochanteral-noncollusive-eunice.ngrok-free.dev/api';
-const WS_BASE_URL = 'wss://trochanteral-noncollusive-eunice.ngrok-free.dev/ws';
+  : 'https://group14.site/api';
+const WS_BASE_URL = 'wss://group14.site/ws';
 
 // 資料介面定義
 export interface RecentDataParams {

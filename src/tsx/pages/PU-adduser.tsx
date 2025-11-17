@@ -396,7 +396,7 @@ const AdminManagement = () => {
       // 添加 allow_notify 字段（如果存在，否則默認為 false）
       requestBody.allow_notify = editingUser.allow_notify !== undefined ? editingUser.allow_notify : false;
       
-      const response = await fetch('https://trochanteral-noncollusive-eunice.ngrok-free.dev/api/modifyPermissions', {
+      const response = await fetch('https://group14.site/api/modifyPermissions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -179,7 +179,7 @@ const LaboratoryManagement = () => {
     }
     
     try {
-      const response = await fetch('https://trochanteral-noncollusive-eunice.ngrok-free.dev/api/deleteLab', {
+      const response = await fetch('https://group14.site/api/deleteLab', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

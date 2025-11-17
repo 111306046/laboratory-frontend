@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
+import { canAccessAlertFeature, isSuperUserAccount } from '../utils/accessControl';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -14,7 +15,6 @@ interface UserInfo {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredPermission }) => {
-  const SUPER_USER_ACCOUNT = 'yezyez';
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -36,7 +36,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredPermi
         const userPermissions = localStorage.getItem('user_permissions');
         
         let userRole = '一般用戶';
-        const isSuperUser = userAccount === SUPER_USER_ACCOUNT;
+        const isSuperUser = isSuperUserAccount(userAccount);
         if (userPermissions) {
           const permissions = JSON.parse(userPermissions);
           if (permissions.includes('create_user')) {
@@ -101,7 +101,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredPermi
   // 檢查權限
   if (requiredPermission) {
     let hasAccess = false;
-    const isSuperUser = userInfo.user_id === SUPER_USER_ACCOUNT;
+    const isSuperUser = isSuperUserAccount(userInfo.user_id);
     // 特殊處理：公司管理需要 create_user 權限（管理員才能管理公司）
     // 或者 yezyez 帳號也可以訪問
     if (requiredPermission === 'superuser') {
@@ -111,7 +111,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredPermi
     }
     // 特殊處理：警報設置允許 set_thresholds 或 modify_lab 權限
     else if (requiredPermission === 'set_thresholds') {
-      hasAccess = userInfo.permissions.includes('set_thresholds') || userInfo.permissions.includes('modify_lab');
+      hasAccess = canAccessAlertFeature(userInfo.permissions, userInfo.user_id);
     } else {
       hasAccess = userInfo.permissions.includes(requiredPermission);
     }

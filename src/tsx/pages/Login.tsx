@@ -1,18 +1,23 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from '../services/api';
+import { setUserAllowNotify } from '../utils/accessControl';
 
 // 使用新的 API 服務，移除舊的 api 函數
 
 const normalizeLabName = (value: string): string => {
   if (!value) return '';
-  const sanitized = value.trim().replace(/\s+/g, '_');
+  let sanitized = value.trim().replace(/\s+/g, '_');
   if (!sanitized) return '';
-  if (sanitized.toLowerCase().endsWith('_lab')) {
+  const trimSuffix = (input: string) => input.replace(/[_-]+$/g, '');
+  const lowerSanitized = sanitized.toLowerCase();
+  if (lowerSanitized.endsWith('_lab')) {
     const base = sanitized.slice(0, -4);
-    return `${base.toLowerCase()}_lab`;
+    const cleanedBase = trimSuffix(base);
+    return `${cleanedBase || base}_lab`;
   }
-  return `${sanitized.toLowerCase()}_lab`;
+  const cleaned = trimSuffix(sanitized);
+  return `${cleaned || sanitized}_lab`;
 };
 
 const saveCompanyLab = (value?: string | string[] | null): boolean => {
@@ -65,9 +70,11 @@ const Login: React.FC = () => {
       localStorage.removeItem('company_lab');
       localStorage.removeItem('company');
       localStorage.removeItem('company_name');
+      setUserAllowNotify(false);
       
       const companyFromServer = (data as any).company as string | undefined;
       const companyLabFromServer = (data as any).company_lab as string | undefined;
+      let resolvedPermissions: string[] = [];
 
       // 如果後端有提供 company_lab，優先保存
       if (companyLabFromServer) {
@@ -85,6 +92,7 @@ const Login: React.FC = () => {
         ];
         localStorage.setItem('user_permissions', JSON.stringify(superPerms));
         localStorage.setItem('is_superuser', 'true');
+        resolvedPermissions = superPerms;
         if (!localStorage.getItem('lab')) {
           if (!saveCompanyLab(companyLabFromServer) && !saveCompanyLab(companyFromServer)) {
             saveCompanyLab('nccu');
@@ -96,11 +104,13 @@ const Login: React.FC = () => {
         localStorage.setItem('user_permissions', JSON.stringify(perms));
         // 判斷是否為管理員（擁有 create_user 權限）
         localStorage.setItem('is_superuser', perms.includes('create_user') ? 'true' : 'false');
+        resolvedPermissions = perms;
       } else if (data.func_permissions && Array.isArray(data.func_permissions)) {
         // 後端回傳 func_permissions
         localStorage.setItem('user_permissions', JSON.stringify(data.func_permissions));
         // 判斷是否為管理員（擁有 create_user 權限）
         localStorage.setItem('is_superuser', data.func_permissions.includes('create_user') ? 'true' : 'false');
+        resolvedPermissions = data.func_permissions;
       }
       if (companyFromServer) {
         localStorage.setItem('company', companyFromServer);
@@ -109,7 +119,7 @@ const Login: React.FC = () => {
           saveCompanyLab(companyFromServer);
         }
       }
-      
+
       // 保存用戶的 lab 信息（如果後端提供）
       if ((data as any).lab) {
         const userLab = (data as any).lab;
@@ -124,8 +134,25 @@ const Login: React.FC = () => {
 
       // 若仍沒有權限，給最小集（避免界面空白）
       if (!localStorage.getItem('user_permissions')) {
-        localStorage.setItem('user_permissions', JSON.stringify(['view_data', 'change_password']));
+        const fallbackPerms = ['view_data', 'change_password'];
+        localStorage.setItem('user_permissions', JSON.stringify(fallbackPerms));
         if (!localStorage.getItem('is_superuser')) localStorage.setItem('is_superuser', 'false');
+        resolvedPermissions = fallbackPerms;
+      }
+      if (resolvedPermissions.length === 0) {
+        try {
+          resolvedPermissions = JSON.parse(localStorage.getItem('user_permissions') || '[]');
+        } catch {
+          resolvedPermissions = [];
+        }
+      }
+
+      const allowNotifyFromResponse = (data as any).allow_notify;
+      if (typeof allowNotifyFromResponse !== 'undefined') {
+        setUserAllowNotify(Boolean(allowNotifyFromResponse));
+      } else {
+        const fallbackAllow = resolvedPermissions.includes('set_thresholds') || resolvedPermissions.includes('modify_notification');
+        setUserAllowNotify(fallbackAllow);
       }
 
       // 確保 superuser 具備預設公司與實驗室，以免 WS 或品牌顯示異常

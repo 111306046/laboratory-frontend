@@ -47,16 +47,22 @@ const Home: React.FC = () => {
     }
 
     // 獲取公司實驗室信息（從 localStorage）
-    const getCompanyLab = (): string => {
-      // 優先使用 company_lab
-      const companyLab = localStorage.getItem('lab');
-      if (companyLab) {
-        return companyLab;
+    const formatLabName = (value: string): string => {
+      if (!value) return 'NCCU_lab';
+      const trimmed = value.trim().replace(/\s+/g, '_');
+      if (!trimmed) return 'NCCU_lab';
+      if (trimmed.toLowerCase().endsWith('_lab')) {
+        const base = trimmed.slice(0, -4).replace(/[_-]+$/g, '');
+        return `${base || trimmed.slice(0, -4)}_lab`;
       }
-      
-      // 後備：從 company 推導
+      return `${trimmed.replace(/[_-]+$/g, '') || trimmed}_lab`;
+    };
+
+    const getCompanyLab = (): string => {
+      const storedLab = localStorage.getItem('lab');
+      if (storedLab) return storedLab;
       const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
-      return `${company.replace(/\s+/g, '_')}_lab`;
+      return formatLabName(company);
     };
 
     const companyLab = getCompanyLab();

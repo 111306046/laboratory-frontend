@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FiHome, FiUser, FiSettings, FiMenu, FiLogOut, FiDatabase, FiAlertCircle, FiBarChart2 } from 'react-icons/fi';
 import { logout } from '../services/api';
+import { canAccessAlertFeature, isSuperUserAccount, setUserAllowNotify } from '../utils/accessControl';
 
 interface SidebarProps {
   sidebarOpen: boolean;
@@ -21,8 +22,6 @@ interface UserInfo {
   role: string;
   permissions: string[];
 }
-
-const SUPER_USER_ACCOUNT = 'yezyez';
 
 const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const navigate = useNavigate();
@@ -49,7 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         console.log('用戶權限:', permissions); // 調試用
         
         if (permissions.includes('create_user')) {
-          const isSuperUser = userAccount === SUPER_USER_ACCOUNT;
+          const isSuperUser = isSuperUserAccount(userAccount);
           userRole = isSuperUser ? '超級使用者' : '管理員';
         } else if (permissions.includes('modify_lab') || permissions.includes('get_labs')) {
           userRole = '實驗室管理員';
@@ -81,7 +80,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   // 檢查用戶是否有特定權限
   const hasPermission = (permission: string): boolean => {
     if (permission === 'none') return true;
-    const isSuperUser = userInfo.user_id === SUPER_USER_ACCOUNT;
+    const isSuperUser = isSuperUserAccount(userInfo.user_id);
     if (permission === 'superuser') {
       return isSuperUser;
     }
@@ -89,9 +88,9 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     if (permission === 'create_user' && isSuperUser) {
       return true;
     }
-    // 特殊處理：警報設置允許 set_thresholds 或 modify_lab 權限
+    // 特殊處理：警報設置僅顯示給具備警報服務資格的帳號
     if (permission === 'set_thresholds') {
-      return userInfo.permissions.includes('set_thresholds') || userInfo.permissions.includes('modify_lab');
+      return canAccessAlertFeature(userInfo.permissions, userInfo.user_id);
     }
     return userInfo.permissions.includes(permission);
   };
@@ -137,6 +136,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       localStorage.removeItem('refresh_token');
       localStorage.removeItem('user_account');
       localStorage.removeItem('user_permissions');
+      setUserAllowNotify(false);
       navigate('/login');
     }
   };

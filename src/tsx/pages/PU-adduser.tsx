@@ -7,6 +7,7 @@ import {
   type Permission 
 } from '../utils/permissions';
 import { getLabs, type LabInfo, deleteUser as deleteUserAPI } from '../services/api';
+import { setUserAllowNotify } from '../utils/accessControl';
 
 // 定義用戶介面 - 根據後端API結構調整
 interface User {
@@ -28,6 +29,11 @@ interface NewUser {
   irole?: string;
   allow_notify?: boolean; // 是否允許通知（影響是否顯示 set_thresholds / modify_notification）
 }
+
+const normalizeLabValue = (value: string | undefined | null) => {
+  if (!value) return '';
+  return value.trim().toLowerCase().replace(/[\s_\-]+/g, '');
+};
 
 const AdminManagement = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -352,7 +358,13 @@ const AdminManagement = () => {
 
   // 編輯用戶
   const handleEditUser = (user: User) => {
-    setEditingUser({...user});
+    const normalizedLabs = user.lab
+      ? (Array.isArray(user.lab) ? user.lab : [user.lab]).map(l => l ?? '').filter(Boolean)
+      : [];
+    setEditingUser({
+      ...user,
+      lab: normalizedLabs.length > 0 ? normalizedLabs : []
+    });
     setShowEditModal(true);
     // 在控制台輸出當前 localStorage 中的數據
     console.log('打開編輯用戶，檢查 localStorage:', {
@@ -436,9 +448,16 @@ const AdminManagement = () => {
         throw new Error(errorMessage);
       }
 
+      const currentAccount = localStorage.getItem('user_account');
+      const editedAccount = editingUser.account;
+      const allowNotifyValue = editingUser.allow_notify ?? false;
+
       alert('用戶修改成功！');
       setShowEditModal(false);
       setEditingUser(null);
+      if (currentAccount && currentAccount === editedAccount) {
+        setUserAllowNotify(Boolean(allowNotifyValue));
+      }
       fetchUsers(); // 重新獲取用戶列表
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '修改用戶失敗';
@@ -724,23 +743,31 @@ const AdminManagement = () => {
                           {newUser.company ? `該公司暫無可用實驗室` : '請先輸入公司名稱'}
                         </div>
                       ) : (
-                        <div className="space-y-2">
-                          {filteredLabs.map((lab) => (
+                  <div className="space-y-2">
+                      {(() => {
+                        const currentLabs = newUser.lab || [];
+                        const normalizedCurrentLabs = currentLabs.map(normalizeLabValue);
+                        return filteredLabs.map((lab) => {
+                          const labKey = normalizeLabValue(lab.name);
+                          const isChecked = normalizedCurrentLabs.includes(labKey);
+                          return (
                             <label key={lab.id} className="flex items-center">
                               <input
                                 type="checkbox"
-                                checked={newUser.lab?.includes(lab.name) || false}
+                                checked={isChecked}
                                 onChange={(e) => {
-                                  const currentLabs = newUser.lab || [];
+                                  const labsArray = newUser.lab || [];
                                   if (e.target.checked) {
-                                    setNewUser({
-                                      ...newUser,
-                                      lab: [...currentLabs, lab.name]
-                                    });
+                                    if (!isChecked) {
+                                      setNewUser({
+                                        ...newUser,
+                                        lab: [...labsArray, lab.name]
+                                      });
+                                    }
                                   } else {
                                     setNewUser({
                                       ...newUser,
-                                      lab: currentLabs.filter(l => l !== lab.name)
+                                      lab: labsArray.filter(l => normalizeLabValue(l) !== labKey)
                                     });
                                   }
                                 }}
@@ -748,8 +775,10 @@ const AdminManagement = () => {
                               />
                               <span className="text-sm">{lab.name}</span>
                             </label>
-                          ))}
-                        </div>
+                          );
+                        });
+                      })()}
+                    </div>
                       )}
                     </div>
                   )}
@@ -903,33 +932,40 @@ const AdminManagement = () => {
                   }
                   
                   const currentLabs = editingUser.lab ? (Array.isArray(editingUser.lab) ? editingUser.lab : [editingUser.lab]) : [];
+                  const normalizedCurrentLabs = currentLabs.map(normalizeLabValue);
                   
                   return (
                     <div className="space-y-2">
-                      {companyLabs.map((lab) => (
-                        <label key={lab.id} className="flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={currentLabs.includes(lab.name)}
-                            onChange={(e) => {
-                              const labsArray = currentLabs;
-                              if (e.target.checked) {
-                                setEditingUser({
-                                  ...editingUser,
-                                  lab: [...labsArray, lab.name]
-                                });
-                              } else {
-                                setEditingUser({
-                                  ...editingUser,
-                                  lab: labsArray.filter(l => l !== lab.name)
-                                });
-                              }
-                            }}
-                            className="mr-2"
-                          />
-                          <span className="text-sm">{lab.name}</span>
-                        </label>
-                      ))}
+                      {companyLabs.map((lab) => {
+                        const labKey = normalizeLabValue(lab.name);
+                        const isChecked = normalizedCurrentLabs.includes(labKey);
+                        return (
+                          <label key={lab.id} className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const labsArray = currentLabs;
+                                if (e.target.checked) {
+                                  if (!isChecked) {
+                                    setEditingUser({
+                                      ...editingUser,
+                                      lab: [...labsArray, lab.name]
+                                    });
+                                  }
+                                } else {
+                                  setEditingUser({
+                                    ...editingUser,
+                                    lab: labsArray.filter(l => normalizeLabValue(l) !== labKey)
+                                  });
+                                }
+                              }}
+                              className="mr-2"
+                            />
+                            <span className="text-sm">{lab.name}</span>
+                          </label>
+                        );
+                      })}
                     </div>
                   );
                 })()}

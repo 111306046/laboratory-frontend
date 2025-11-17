@@ -41,6 +41,13 @@ interface StatisticsData {
   }>;
 }
 
+const renderEmptyChartState = (message: string) => (
+  <div className="h-80 flex flex-col items-center justify-center text-gray-500 space-y-3">
+    <AlertTriangle className="w-8 h-8 text-gray-400" />
+    <p className="text-sm">{message}</p>
+  </div>
+);
+
 const StaticChart: React.FC = () => {
   const [data, setData] = useState<StatisticsData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -320,6 +327,15 @@ const StaticChart: React.FC = () => {
 
         setRawData(sensorData);
         
+        if (!sensorData.length) {
+          setData(null);
+          setConnectionStatus('connected');
+          setLastSync(new Date());
+          setError('查無符合條件的資料');
+          setSuccessMessage('');
+          return;
+        }
+        
         // 將原始數據轉換為圖表數據
         const chartData = processDataForCharts(sensorData);
         setData(chartData);
@@ -332,54 +348,8 @@ const StaticChart: React.FC = () => {
         setConnectionStatus('error');
         setError(err instanceof Error ? err.message : '獲取統計數據失敗');
         console.error('獲取統計數據失敗:', err);
-        
-        // 如果 API 失敗，使用模擬數據作為備用
-        const fallbackData: StatisticsData = {
-          hourlyData: [
-            { time: '00:00', co2: 400, humidity: 45, temperature: 22, pm25: 1, pm10: 2, tvoc: 0.128 },
-            { time: '02:00', co2: 420, humidity: 48, temperature: 22.5, pm25: 0, pm10: 1, tvoc: 0.130 },
-            { time: '04:00', co2: 450, humidity: 52, temperature: 23, pm25: 1, pm10: 2, tvoc: 0.127 },
-            { time: '06:00', co2: 480, humidity: 55, temperature: 23.5, pm25: 0, pm10: 1, tvoc: 0.126 },
-            { time: '08:00', co2: 650, humidity: 58, temperature: 24, pm25: 1, pm10: 2, tvoc: 0.129 },
-            { time: '10:00', co2: 800, humidity: 62, temperature: 25, pm25: 0, pm10: 1, tvoc: 0.131 },
-            { time: '12:00', co2: 950, humidity: 65, temperature: 26, pm25: 1, pm10: 2, tvoc: 0.128 },
-            { time: '14:00', co2: 1100, humidity: 68, temperature: 26.5, pm25: 0, pm10: 1, tvoc: 0.130 },
-            { time: '16:00', co2: 1050, humidity: 66, temperature: 26, pm25: 1, pm10: 2, tvoc: 0.127 },
-            { time: '18:00', co2: 850, humidity: 63, temperature: 25.5, pm25: 0, pm10: 1, tvoc: 0.126 },
-            { time: '20:00', co2: 650, humidity: 58, temperature: 24.5, pm25: 1, pm10: 2, tvoc: 0.129 },
-            { time: '22:00', co2: 500, humidity: 52, temperature: 23, pm25: 0, pm10: 1, tvoc: 0.128 }
-          ],
-          statusDistribution: [
-            { name: '優良', value: 40, color: '#10B981' },
-            { name: '良好', value: 35, color: '#84CC16' },
-            { name: '普通', value: 20, color: '#F59E0B' },
-            { name: '不良', value: 5, color: '#EF4444' }
-          ],
-          dailyTrends: [
-            { date: '01-16', avgCO2: 45, maxCO2: 55, minCO2: 35, avgHumidity: 53.1, avgPM25: 1.0, avgTVOC: 0.127 },
-            { date: '01-17', avgCO2: 48, maxCO2: 58, minCO2: 38, avgHumidity: 52.8, avgPM25: 1.2, avgTVOC: 0.130 },
-            { date: '01-18', avgCO2: 42, maxCO2: 52, minCO2: 32, avgHumidity: 53.5, avgPM25: 0.8, avgTVOC: 0.125 },
-            { date: '01-19', avgCO2: 50, maxCO2: 60, minCO2: 40, avgHumidity: 52.2, avgPM25: 1.1, avgTVOC: 0.128 },
-            { date: '01-20', avgCO2: 38, maxCO2: 48, minCO2: 28, avgHumidity: 54.0, avgPM25: 0.9, avgTVOC: 0.124 },
-            { date: '01-21', avgCO2: 52, maxCO2: 62, minCO2: 42, avgHumidity: 51.8, avgPM25: 1.3, avgTVOC: 0.132 },
-            { date: '01-22', avgCO2: 46, maxCO2: 56, minCO2: 36, avgHumidity: 53.3, avgPM25: 1.0, avgTVOC: 0.126 }
-          ],
-          parameterRanges: [
-            { parameter: 'CO₂', excellent: 85, good: 10, fair: 5, poor: 0 },
-            { parameter: 'PM2.5', excellent: 90, good: 8, fair: 2, poor: 0 },
-            { parameter: 'PM10', excellent: 88, good: 10, fair: 2, poor: 0 },
-            { parameter: 'TVOC', excellent: 92, good: 6, fair: 2, poor: 0 }
-          ],
-          environmentalInsights: [
-            { type: 'positive', message: 'CO₂ 濃度優良，空氣流通良好' },
-            { type: 'positive', message: 'PM2.5 和 PM10 濃度均在安全範圍內' },
-            { type: 'positive', message: 'TVOC 濃度低，室內空氣品質良好' },
-            { type: 'info', message: '濕度在理想範圍內，環境舒適' }
-          ]
-        };
-        
-        setData(fallbackData);
-        // 不顯示「使用模擬數據」提示，靜默回退
+        setData(null);
+        setSuccessMessage('');
       } finally {
         setIsLoading(false);
       }
@@ -433,6 +403,11 @@ const StaticChart: React.FC = () => {
       </div>
     );
   }
+
+  const hasHourlyData = (data?.hourlyData?.length || 0) > 0;
+  const hasDailyTrendData = (data?.dailyTrends?.length || 0) > 0;
+  const hasParameterRangeData = (data?.parameterRanges || []).some(range => (range.excellent + range.good + range.fair + range.poor) > 0);
+  const hasStatusDistributionData = (data?.statusDistribution || []).some(item => item.value > 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
@@ -556,36 +531,40 @@ const StaticChart: React.FC = () => {
                     <option value="tvoc">TVOC</option>
                   </select>
                 </div>
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={data.hourlyData}>
-                      <defs>
-                        <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8}/>
-                          <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.1}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                      <XAxis dataKey="time" stroke="#6B7280" fontSize={12} />
-                      <YAxis stroke="#6B7280" fontSize={12} />
-                      <Tooltip 
-                        contentStyle={{
-                          backgroundColor: 'white',
-                          border: '1px solid #E5E7EB',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey={selectedParameter}
-                        stroke="#3B82F6"
-                        strokeWidth={2}
-                        fill="url(#colorGradient)"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
+                {hasHourlyData ? (
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={data.hourlyData}>
+                        <defs>
+                          <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.1}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                        <XAxis dataKey="time" stroke="#6B7280" fontSize={12} />
+                        <YAxis stroke="#6B7280" fontSize={12} />
+                        <Tooltip 
+                          contentStyle={{
+                            backgroundColor: 'white',
+                            border: '1px solid #E5E7EB',
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                          }}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey={selectedParameter}
+                          stroke="#3B82F6"
+                          strokeWidth={2}
+                          fill="url(#colorGradient)"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  renderEmptyChartState('目前尚無 24 小時趨勢資料')
+                )}
               </div>
 
               {/* 7日趨勢對比 */}
@@ -594,27 +573,31 @@ const StaticChart: React.FC = () => {
                   <TrendingUp className="w-5 h-5" />
                   7日 CO₂ 濃度趨勢
                 </h2>
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data.dailyTrends}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                      <XAxis dataKey="date" stroke="#6B7280" fontSize={12} />
-                      <YAxis stroke="#6B7280" fontSize={12} />
-                      <Tooltip 
-                        contentStyle={{
-                          backgroundColor: 'white',
-                          border: '1px solid #E5E7EB',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                        }}
-                      />
-                      <Legend />
-                      <Line type="monotone" dataKey="avgCO2" stroke="#3B82F6" strokeWidth={2} name="平均值" />
-                      <Line type="monotone" dataKey="maxCO2" stroke="#EF4444" strokeWidth={2} name="最高值" />
-                      <Line type="monotone" dataKey="minCO2" stroke="#10B981" strokeWidth={2} name="最低值" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
+                {hasDailyTrendData ? (
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={data.dailyTrends}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                        <XAxis dataKey="date" stroke="#6B7280" fontSize={12} />
+                        <YAxis stroke="#6B7280" fontSize={12} />
+                        <Tooltip 
+                          contentStyle={{
+                            backgroundColor: 'white',
+                            border: '1px solid #E5E7EB',
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                          }}
+                        />
+                        <Legend />
+                        <Line type="monotone" dataKey="avgCO2" stroke="#3B82F6" strokeWidth={2} name="平均值" />
+                        <Line type="monotone" dataKey="maxCO2" stroke="#EF4444" strokeWidth={2} name="最高值" />
+                        <Line type="monotone" dataKey="minCO2" stroke="#10B981" strokeWidth={2} name="最低值" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  renderEmptyChartState('目前尚無 7 日趨勢資料')
+                )}
               </div>
 
               {/* 參數分布狀況 */}
@@ -623,28 +606,32 @@ const StaticChart: React.FC = () => {
                   <Thermometer className="w-5 h-5" />
                   各參數狀態分布
                 </h2>
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data.parameterRanges}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                      <XAxis dataKey="parameter" stroke="#6B7280" fontSize={12} />
-                      <YAxis stroke="#6B7280" fontSize={12} />
-                      <Tooltip 
-                        contentStyle={{
-                          backgroundColor: 'white',
-                          border: '1px solid #E5E7EB',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                        }}
-                      />
-                      <Legend />
-                      <Bar dataKey="excellent" stackId="a" fill="#10B981" name="優良" />
-                      <Bar dataKey="good" stackId="a" fill="#84CC16" name="良好" />
-                      <Bar dataKey="fair" stackId="a" fill="#F59E0B" name="普通" />
-                      <Bar dataKey="poor" stackId="a" fill="#EF4444" name="不良" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                {hasParameterRangeData ? (
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={data.parameterRanges}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                        <XAxis dataKey="parameter" stroke="#6B7280" fontSize={12} />
+                        <YAxis stroke="#6B7280" fontSize={12} />
+                        <Tooltip 
+                          contentStyle={{
+                            backgroundColor: 'white',
+                            border: '1px solid #E5E7EB',
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="excellent" stackId="a" fill="#10B981" name="優良" />
+                        <Bar dataKey="good" stackId="a" fill="#84CC16" name="良好" />
+                        <Bar dataKey="fair" stackId="a" fill="#F59E0B" name="普通" />
+                        <Bar dataKey="poor" stackId="a" fill="#EF4444" name="不良" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  renderEmptyChartState('目前尚無參數狀態資料')
+                )}
               </div>
             </div>
 
@@ -653,38 +640,44 @@ const StaticChart: React.FC = () => {
               {/* 狀態分布餅圖 */}
               <div className="bg-white rounded-lg shadow-lg p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">整體狀態分布</h3>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={data.statusDistribution}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={renderCustomizedLabel}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {data.statusDistribution.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="mt-4 space-y-2">
-                  {data.statusDistribution.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{backgroundColor: item.color}}></div>
-                        <span className="text-sm text-gray-700">{item.name}</span>
-                      </div>
-                      <span className="text-sm font-medium">{item.value}%</span>
+                {hasStatusDistributionData ? (
+                  <>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={data.statusDistribution}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={renderCustomizedLabel}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {data.statusDistribution.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
                     </div>
-                  ))}
-                </div>
+                    <div className="mt-4 space-y-2">
+                      {data.statusDistribution.map((item, index) => (
+                        <div key={index} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full" style={{backgroundColor: item.color}}></div>
+                            <span className="text-sm text-gray-700">{item.name}</span>
+                          </div>
+                          <span className="text-sm font-medium">{item.value}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  renderEmptyChartState('目前尚無狀態分布資料')
+                )}
               </div>
 
               {/* 系統狀態 */}

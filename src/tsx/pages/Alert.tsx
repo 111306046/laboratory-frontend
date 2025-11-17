@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Bell, Settings, Save, AlertTriangle, CheckCircle, XCircle, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { generateBindingCode, getThresholdBySensor, setThresholds } from '../services/api';
+import { getUserAllowNotify } from '../utils/accessControl';
 import botQR from '../../assets/bot QR.png';
 
 // 警報介面定義
@@ -25,6 +26,7 @@ interface NotificationSettings {
 const API_BASE_URL = '';
 
 const Alert = () => {
+  const allowNotify = getUserAllowNotify();
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [notifications, setNotifications] = useState<NotificationSettings>({
     email: true,
@@ -129,7 +131,7 @@ const Alert = () => {
     
     // 最後後備：從 company 推導
     const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
-    return company.toLowerCase().replace(/\s+/g, '_');
+    return company.trim().replace(/\s+/g, '_');
   };
   
   // 獲取機器類型（sensor），用於後端 API 的 sensor 參數
@@ -250,15 +252,25 @@ const Alert = () => {
       const data = await apiCall('/notifications');
       setNotifications(data);
     } catch (error) {
-      console.error('載入通知設定失敗:', error);
     }
   };
 
   // 組件載入時執行
   useEffect(() => {
+    if (!allowNotify) {
+      setLoading(false);
+      setAlerts([]);
+      setNotifications({
+        email: false,
+        sms: false,
+        sound: false,
+        push: false
+      });
+      return;
+    }
     loadAlerts();
     loadNotifications();
-  }, []);
+  }, [allowNotify]);
 
   // 倒數計時效果
   useEffect(() => {
@@ -328,7 +340,6 @@ const Alert = () => {
       // 成功後重新載入警報設定以確保數據同步
       await loadAlerts();
     } catch (error: any) {
-      console.error('更新警報失敗:', error);
       // 失敗時回退
       loadAlerts();
     }
@@ -387,7 +398,6 @@ const Alert = () => {
       // 重新載入警報列表
       await loadAlerts();
     } catch (error: any) {
-      console.error('新增警報設定失敗:', error);
       setError(error?.message || '新增警報設定失敗');
     }
   };
@@ -419,7 +429,6 @@ const Alert = () => {
       // 重新載入警報列表
       await loadAlerts();
     } catch (error: any) {
-      console.error('刪除警報設定失敗:', error);
       setError(error?.message || '刪除警報設定失敗');
     }
   };
@@ -494,7 +503,6 @@ const Alert = () => {
       setShowSaveModal(true);
       setTimeout(() => setShowSaveModal(false), 1500);
     } catch (err) {
-      console.error('發送測試通知失敗:', err);
       setError('發送測試通知失敗');
     } finally {
       setSaving(false);
@@ -509,6 +517,18 @@ const Alert = () => {
         <div className="text-center">
           <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-blue-600" />
           <p className="text-gray-600">載入警報設定中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!allowNotify) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="bg-white rounded-lg shadow-lg p-6 max-w-md text-center border border-red-200">
+          <AlertTriangle className="w-8 h-8 text-red-500 mx-auto mb-3" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">權限不足</h2>
+          <p className="text-gray-600 mb-4">此帳號尚未啟用通知功能，無法進入警報設置。</p>
         </div>
       </div>
     );

@@ -14,6 +14,7 @@ interface UserInfo {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredPermission }) => {
+  const SUPER_USER_ACCOUNT = 'yezyez';
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -35,14 +36,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredPermi
         const userPermissions = localStorage.getItem('user_permissions');
         
         let userRole = '一般用戶';
+        const isSuperUser = userAccount === SUPER_USER_ACCOUNT;
         if (userPermissions) {
           const permissions = JSON.parse(userPermissions);
           if (permissions.includes('create_user')) {
-            if (userAccount === 'yezyez') {
-              userRole = '超級使用者';
-            } else {
-              userRole = '管理員';
-            }
+            userRole = isSuperUser ? '超級使用者' : '管理員';
           } else if (permissions.includes('modify_lab')) {
             userRole = '實驗室管理員';
           } else if (permissions.includes('view_data')) {
@@ -103,10 +101,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredPermi
   // 檢查權限
   if (requiredPermission) {
     let hasAccess = false;
+    const isSuperUser = userInfo.user_id === SUPER_USER_ACCOUNT;
     // 特殊處理：公司管理需要 create_user 權限（管理員才能管理公司）
     // 或者 yezyez 帳號也可以訪問
-    if (requiredPermission === 'create_user') {
-      hasAccess = userInfo.permissions.includes('create_user') || userInfo.user_id === 'yezyez';
+    if (requiredPermission === 'superuser') {
+      hasAccess = isSuperUser;
+    } else if (requiredPermission === 'create_user') {
+      hasAccess = userInfo.permissions.includes('create_user') || isSuperUser;
     }
     // 特殊處理：警報設置允許 set_thresholds 或 modify_lab 權限
     else if (requiredPermission === 'set_thresholds') {

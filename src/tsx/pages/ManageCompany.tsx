@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { manageCompany, getCompany, deleteCompany, getCompanyByName, type CompanyDetail } from '../services/api';
 import { Trash2, Building2, RefreshCw, CheckCircle, XCircle, Search } from 'lucide-react';
 
+const SUPER_USER_ACCOUNT = 'yezyez';
+
 const ManageCompany: React.FC = () => {
+  const [isSuperUser, setIsSuperUser] = useState<boolean | null>(null);
   // 右側表單狀態
   const [company, setCompany] = useState('');
   const [extraAuth, setExtraAuth] = useState<boolean>(false);
@@ -22,8 +25,13 @@ const ManageCompany: React.FC = () => {
   const [queryResult, setQueryResult] = useState<CompanyDetail | null>(null);
   const [queryLoading, setQueryLoading] = useState(false);
 
+  useEffect(() => {
+    const account = typeof window !== 'undefined' ? localStorage.getItem('user_account') : null;
+    setIsSuperUser(account === SUPER_USER_ACCOUNT);
+  }, []);
+
   // 獲取公司列表
-  const fetchCompanies = async () => {
+  const fetchCompanies = useCallback(async () => {
     try {
       setLoadingCompanies(true);
       const data = await getCompany();
@@ -34,12 +42,14 @@ const ManageCompany: React.FC = () => {
     } finally {
       setLoadingCompanies(false);
     }
-  };
+  }, []);
 
   // 元件載入時獲取公司列表
   useEffect(() => {
-    fetchCompanies();
-  }, []);
+    if (isSuperUser) {
+      fetchCompanies();
+    }
+  }, [isSuperUser, fetchCompanies]);
 
   // 編輯公司（點擊公司名稱時填充表單）
   const handleEditCompany = (companyName: string) => {
@@ -159,6 +169,31 @@ const ManageCompany: React.FC = () => {
       setLoading(false);
     }
   };
+
+  if (isSuperUser === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-24 w-24 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!isSuperUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="bg-white rounded-lg shadow-lg p-6 max-w-md text-center">
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">僅限超級使用者</h2>
+          <p className="text-gray-600 mb-4">您沒有權限訪問公司管理頁面</p>
+          <button
+            onClick={() => window.location.href = '/dashboard'}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            返回首頁
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

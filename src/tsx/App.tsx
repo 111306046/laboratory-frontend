@@ -22,7 +22,7 @@ function App() {
         <Route path="/PU-addusers" element={<ProtectedRoute requiredPermission="get_users"><Layout><AddUser /></Layout></ProtectedRoute>} />
         <Route path="/PU-laboratarymnagement" element={<ProtectedRoute requiredPermission="get_labs"><Layout><LaboratoryManagement /></Layout></ProtectedRoute>} />        
         <Route path="/alert" element={<ProtectedRoute requiredPermission="set_thresholds"><Layout><Alert /></Layout></ProtectedRoute>} />
-        <Route path="/manage-company" element={<ProtectedRoute requiredPermission="create_user"><Layout><ManageCompany /></Layout></ProtectedRoute>} />
+        <Route path="/manage-company" element={<ProtectedRoute requiredPermission="superuser"><Layout><ManageCompany /></Layout></ProtectedRoute>} />
         <Route path="/static-chart" element={<ProtectedRoute requiredPermission="view_data"><Layout><StaticChart /></Layout></ProtectedRoute>} />
 
       </Routes>

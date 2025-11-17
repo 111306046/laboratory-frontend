@@ -22,6 +22,8 @@ interface UserInfo {
   permissions: string[];
 }
 
+const SUPER_USER_ACCOUNT = 'yezyez';
+
 const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const navigate = useNavigate();
   const [userInfo, setUserInfo] = useState<UserInfo>({ 
@@ -47,12 +49,8 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         console.log('用戶權限:', permissions); // 調試用
         
         if (permissions.includes('create_user')) {
-          // 如果是 yezyez 且有管理員權限，顯示超級使用者
-          if (userAccount === 'yezyez') {
-            userRole = '超級使用者';
-          } else {
-            userRole = '管理員';
-          }
+          const isSuperUser = userAccount === SUPER_USER_ACCOUNT;
+          userRole = isSuperUser ? '超級使用者' : '管理員';
         } else if (permissions.includes('modify_lab') || permissions.includes('get_labs')) {
           userRole = '實驗室管理員';
         } else if (permissions.includes('view_data')) {
@@ -83,9 +81,12 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   // 檢查用戶是否有特定權限
   const hasPermission = (permission: string): boolean => {
     if (permission === 'none') return true;
-    // 特殊處理：公司管理需要 create_user 權限（管理員才能管理公司）
-    // 或者 yezyez 帳號也可以訪問
-    if (permission === 'create_user' && userInfo.user_id === 'yezyez') {
+    const isSuperUser = userInfo.user_id === SUPER_USER_ACCOUNT;
+    if (permission === 'superuser') {
+      return isSuperUser;
+    }
+    // 特殊處理：公司管理允許管理員與超級帳號（目前僅用 superuser，所以保留邏輯以供其他場景）
+    if (permission === 'create_user' && isSuperUser) {
       return true;
     }
     // 特殊處理：警報設置允許 set_thresholds 或 modify_lab 權限
@@ -104,7 +105,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       { title: '統計圖表', path: '/static-chart', icon: <FiBarChart2 size={20} />, requiredPermission: 'view_data' },
       { title: '用戶管理', path: '/PU-addusers', icon: <FiUser size={20} />, requiredPermission: 'get_users' },
       { title: '實驗室管理', path: '/PU-laboratarymnagement', icon: <FiSettings size={20} />, requiredPermission: 'get_labs' },
-      { title: '公司管理', path: '/manage-company', icon: <FiSettings size={20} />, requiredPermission: 'create_user' },
+      { title: '公司管理', path: '/manage-company', icon: <FiSettings size={20} />, requiredPermission: 'superuser' },
     ];
 
     return allNavItems.filter(item => {

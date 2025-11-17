@@ -297,7 +297,7 @@ const StaticChart: React.FC = () => {
         const hours = selectedTimeRange === '30d' ? 24 * 30 : selectedTimeRange === '7d' ? 24 * 7 : 24;
         const start = new Date(now.getTime() - hours * 60 * 60 * 1000);
         const companyLab =
-          localStorage.getItem('company_lab') ||
+          localStorage.getItem('lab') ||
           localStorage.getItem('company')?.toLowerCase().replace(/\s+/g, '_') + '_lab' ||
           'nccu_lab';
         const machine = localStorage.getItem('machine') || 'aq';

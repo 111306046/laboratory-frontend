@@ -49,7 +49,7 @@ const Home: React.FC = () => {
     // 獲取公司實驗室信息（從 localStorage）
     const getCompanyLab = (): string => {
       // 優先使用 company_lab
-      const companyLab = localStorage.getItem('company_lab');
+      const companyLab = localStorage.getItem('lab');
       if (companyLab) {
         return companyLab;
       }

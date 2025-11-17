@@ -121,10 +121,10 @@ const Alert = () => {
       // 忽略解析錯誤
     }
     
-    // 後備：使用 company_lab（移除 _lab 後綴）
-    const companyLab = localStorage.getItem('company_lab');
-    if (companyLab) {
-      return companyLab.replace(/_lab$/i, '');
+    // 後備：使用 lab（移除 _lab 後綴）
+    const storedLab = localStorage.getItem('lab');
+    if (storedLab) {
+      return storedLab.replace(/_lab$/i, '');
     }
     
     // 最後後備：從 company 推導
@@ -473,7 +473,7 @@ const Alert = () => {
       const company =
         localStorage.getItem('company_name') ||
         localStorage.getItem('company') ||
-        localStorage.getItem('company_lab') ||
+        localStorage.getItem('lab') ||
         'NCCU';
       const message = `【警報測試】${company} 實驗室\n` +
         alerts

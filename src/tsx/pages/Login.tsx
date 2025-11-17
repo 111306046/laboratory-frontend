@@ -4,6 +4,28 @@ import { login } from '../services/api';
 
 // 使用新的 API 服務，移除舊的 api 函數
 
+const normalizeLabName = (value: string): string => {
+  if (!value) return '';
+  const sanitized = value.trim().replace(/\s+/g, '_');
+  if (!sanitized) return '';
+  if (sanitized.toLowerCase().endsWith('_lab')) {
+    const base = sanitized.slice(0, -4);
+    return `${base.toLowerCase()}_lab`;
+  }
+  return `${sanitized.toLowerCase()}_lab`;
+};
+
+const saveCompanyLab = (value?: string | string[] | null): boolean => {
+  if (!value) return false;
+  const candidate = Array.isArray(value) ? value[0] : value;
+  if (!candidate) return false;
+  const normalized = normalizeLabName(candidate);
+  if (!normalized) return false;
+  localStorage.setItem('lab', normalized);
+  localStorage.removeItem('company_lab');
+  return true;
+};
+
 const Login: React.FC = () => {
   // 添加狀態管理
   const [account, setAccount] = useState('');
@@ -39,10 +61,19 @@ const Login: React.FC = () => {
       }
       localStorage.setItem('user_account', account);
       // 清理殘留的公司資訊，避免跨帳號污染
+      localStorage.removeItem('lab');
       localStorage.removeItem('company_lab');
       localStorage.removeItem('company');
       localStorage.removeItem('company_name');
       
+      const companyFromServer = (data as any).company as string | undefined;
+      const companyLabFromServer = (data as any).company_lab as string | undefined;
+
+      // 如果後端有提供 company_lab，優先保存
+      if (companyLabFromServer) {
+        saveCompanyLab(companyLabFromServer);
+      }
+
       // 優先使用後端登入回傳的權限與公司（若提供）
       if (account === 'yezyez') {
         // yezyez 擁有所有權限（func_auth + extra_func_auth）
@@ -54,8 +85,10 @@ const Login: React.FC = () => {
         ];
         localStorage.setItem('user_permissions', JSON.stringify(superPerms));
         localStorage.setItem('is_superuser', 'true');
-        if (!localStorage.getItem('company_lab')) {
-          localStorage.setItem('company_lab', 'nccu_lab');
+        if (!localStorage.getItem('lab')) {
+          if (!saveCompanyLab(companyLabFromServer) && !saveCompanyLab(companyFromServer)) {
+            saveCompanyLab('nccu');
+          }
         }
       } else if ((data as any).permissions && Array.isArray((data as any).permissions)) {
         // 後端若以 permissions 回傳
@@ -69,16 +102,11 @@ const Login: React.FC = () => {
         // 判斷是否為管理員（擁有 create_user 權限）
         localStorage.setItem('is_superuser', data.func_permissions.includes('create_user') ? 'true' : 'false');
       }
-      if ((data as any).company) {
-        const comp = (data as any).company as string;
-        localStorage.setItem('company', comp);
-        localStorage.setItem('company_name', comp);
-        // 若未提供 company_lab，依公司推導預設實驗室（保持公司名稱的原始格式）
-        const existingLab = localStorage.getItem('company_lab');
-        if (!existingLab) {
-          // 使用公司名稱的原始格式（不大寫轉換），只處理空格
-          const derivedLab = `${comp.replace(/\s+/g, '_')}_lab`;
-          localStorage.setItem('company_lab', derivedLab);
+      if (companyFromServer) {
+        localStorage.setItem('company', companyFromServer);
+        localStorage.setItem('company_name', companyFromServer);
+        if (!localStorage.getItem('lab')) {
+          saveCompanyLab(companyFromServer);
         }
       }
       
@@ -102,10 +130,12 @@ const Login: React.FC = () => {
 
       // 確保 superuser 具備預設公司與實驗室，以免 WS 或品牌顯示異常
       const userPerms = JSON.parse(localStorage.getItem('user_permissions') || '[]') as string[];
-      if (userPerms.includes('create_user') && !localStorage.getItem('company_lab')) {
-        // 使用默認值，根據實際公司名稱格式決定（這裡假設後端返回的是 NCCU）
-        const defaultCompany = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
-        localStorage.setItem('company_lab', `${defaultCompany.replace(/\s+/g, '_')}_lab`);
+      if (userPerms.includes('create_user') && !localStorage.getItem('lab')) {
+        if (!saveCompanyLab(companyLabFromServer) &&
+            !saveCompanyLab(companyFromServer) &&
+            !saveCompanyLab(localStorage.getItem('company') || localStorage.getItem('company_name'))) {
+          saveCompanyLab('nccu');
+        }
       }
       
       navigate('/dashboard');

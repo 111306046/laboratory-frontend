@@ -26,7 +26,7 @@ const DataRecords: React.FC = () => {
   
   // 新增：實驗室和機器選擇（從 localStorage 帶入，預設 nccu_lab）
   const [selectedCompanyLab] = useState<string>(
-    localStorage.getItem('company_lab') || 'nccu_lab'
+    localStorage.getItem('lab') || 'nccu_lab'
   );
   const [selectedMachine] = useState<string>('aq');
   const [dataCount] = useState<number>(100);

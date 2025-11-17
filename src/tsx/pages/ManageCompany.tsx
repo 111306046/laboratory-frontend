@@ -58,8 +58,7 @@ const ManageCompany: React.FC = () => {
       const detail = await getCompanyByName(companyName);
       setExtraAuth(!!detail.extra_auth);
       setIp(detail.IP || '');
-      setMessage(`已載入公司 "${companyName}" 詳細資訊，可直接修改。`);
-      setMessageType('success');
+      setMessage(null);
     } catch (err: any) {
       setExtraAuth(false);
       setIp('');

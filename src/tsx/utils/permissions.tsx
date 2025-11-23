@@ -8,6 +8,7 @@ export const PERMISSIONS = {
   MODIFY_LAB: 'modify_lab',
   GET_LABS: 'get_labs',
   VIEW_DATA: 'view_data',
+  CONTROL_MACHINE: 'control_machine',
   SET_THRESHOLDS: 'set_thresholds',
   CHANGE_PASSWORD: 'change_password',
   MODIFY_NOTIFICATION: 'modify_notification',
@@ -16,9 +17,8 @@ export const PERMISSIONS = {
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS];
 
 // 後端允許的權限列表 - 完全匹配後端 func_auth 和 extra_func_auth
-// func_auth: ["create_user","modify_user","get_users","modify_lab","get_labs","view_data","change_password"]
+// func_auth: ["create_user","modify_user","get_users","modify_lab","get_labs","view_data","control_machine","change_password"]
 // extra_func_auth: ["set_thresholds","modify_notification"]
-// 注意：control_machine 已移除，不再使用
 export const ALLOWED_PERMISSIONS: Permission[] = [
   'create_user',
   'modify_user', 
@@ -26,6 +26,7 @@ export const ALLOWED_PERMISSIONS: Permission[] = [
   'modify_lab',
   'get_labs',
   'view_data',
+  'control_machine',
   'change_password',
   'set_thresholds',
   'modify_notification',
@@ -38,6 +39,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.MODIFY_LAB]: '修改實驗室',
   [PERMISSIONS.GET_LABS]: '查看實驗室',
   [PERMISSIONS.VIEW_DATA]: '查看數據',
+  [PERMISSIONS.CONTROL_MACHINE]: '控制機台',
   [PERMISSIONS.SET_THRESHOLDS]: '設置警報閾值',
   [PERMISSIONS.CHANGE_PASSWORD]: '修改密碼',
   [PERMISSIONS.MODIFY_NOTIFICATION]: '修改通知',

@@ -17,6 +17,8 @@ interface User {
   lab?: string | string[]; // 實驗室，可以是單個字符串或字符串陣列
   allow_notify?: boolean; // 是否允許通知
   irole?: string;
+  update_time?: string;
+  delete_time?: string;
 }
 
 // 定義新用戶介面
@@ -185,6 +187,7 @@ const AdminManagement = () => {
 
   // 篩選用戶
   const filteredUsers = users.filter(user => {
+    if (user.delete_time) return false;
     const matchesSearch = user.account.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.company.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = filterRole === 'all' || user.func_permissions.includes(filterRole as Permission);
@@ -634,8 +637,17 @@ const AdminManagement = () => {
                 <tr key={user.account} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">{user.account}</div>
-                      <div className="text-sm text-gray-500">{user.company}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-medium text-gray-900">
+                          {user.account}
+                        </div>
+                        <span className="inline-flex px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                          使用中
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        更新時間：{user.update_time ?? '—'}
+                      </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">

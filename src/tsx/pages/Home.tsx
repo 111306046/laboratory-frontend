@@ -1,5 +1,31 @@
 import { useState, useEffect } from 'react';
-import { wsService, getRecentData, SensorData } from '../services/api';
+import { wsService, getRecentData, SensorData, machineOn, machineOff } from '../services/api';
+import { isSuperUserAccount } from '../utils/accessControl';
+
+const MACHINE_TYPE = 'aq';
+
+const formatLabName = (value: string): string => {
+  if (!value) return 'NCCU_lab';
+  const trimmed = value.trim().replace(/\s+/g, '_');
+  if (!trimmed) return 'NCCU_lab';
+  if (trimmed.toLowerCase().endsWith('_lab')) {
+    const base = trimmed.slice(0, -4).replace(/[_-]+$/g, '');
+    return `${base || trimmed.slice(0, -4)}_lab`;
+  }
+  return `${trimmed.replace(/[_-]+$/g, '') || trimmed}_lab`;
+};
+
+const resolveCompanyName = (): string => {
+  if (typeof window === 'undefined') return 'NCCU';
+  return localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
+};
+
+const resolveCompanyLab = (): string => {
+  if (typeof window === 'undefined') return 'NCCU_lab';
+  const storedLab = localStorage.getItem('lab');
+  if (storedLab) return storedLab;
+  return formatLabName(resolveCompanyName());
+};
 
 // 實驗室數據介面 - 使用實際的 SensorData 欄位
 interface LabData {
@@ -29,6 +55,10 @@ const Home: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [hasMachineControl, setHasMachineControl] = useState(false);
+  const [machineControlLoading, setMachineControlLoading] = useState<'on' | 'off' | null>(null);
+  const [machineControlMessage, setMachineControlMessage] = useState<string | null>(null);
+  const [machineControlError, setMachineControlError] = useState<string | null>(null);
 
   // 顏色判斷：紅=偏離正常，橘=接近邊界，綠=正常
   const getStatusBorder = (value: number, min: number, max: number, nearMargin: number) => {
@@ -39,6 +69,20 @@ const Home: React.FC = () => {
   };
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const storedPermissions = localStorage.getItem('user_permissions');
+      const permissions = storedPermissions ? JSON.parse(storedPermissions) : [];
+      const account = localStorage.getItem('user_account');
+      const hasPermission = Array.isArray(permissions) && permissions.includes('control_machine');
+      setHasMachineControl(hasPermission || isSuperUserAccount(account));
+    } catch (error) {
+      console.warn('解析使用者權限失敗:', error);
+      setHasMachineControl(false);
+    }
+  }, []);
+
+  useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
       setError('未找到認證令牌');
@@ -46,27 +90,8 @@ const Home: React.FC = () => {
       return;
     }
 
-    // 獲取公司實驗室信息（從 localStorage）
-    const formatLabName = (value: string): string => {
-      if (!value) return 'NCCU_lab';
-      const trimmed = value.trim().replace(/\s+/g, '_');
-      if (!trimmed) return 'NCCU_lab';
-      if (trimmed.toLowerCase().endsWith('_lab')) {
-        const base = trimmed.slice(0, -4).replace(/[_-]+$/g, '');
-        return `${base || trimmed.slice(0, -4)}_lab`;
-      }
-      return `${trimmed.replace(/[_-]+$/g, '') || trimmed}_lab`;
-    };
-
-    const getCompanyLab = (): string => {
-      const storedLab = localStorage.getItem('lab');
-      if (storedLab) return storedLab;
-      const company = localStorage.getItem('company') || localStorage.getItem('company_name') || 'NCCU';
-      return formatLabName(company);
-    };
-
-    const companyLab = getCompanyLab();
-    const machine = 'aq'; // 機器類型
+    const companyLab = resolveCompanyLab();
+    const machine = MACHINE_TYPE; // 機器類型
 
     // 初始數據獲取
     const fetchInitialData = async () => {
@@ -179,6 +204,28 @@ const Home: React.FC = () => {
     };
   }, []);
 
+  const handleMachineControl = async (action: 'on' | 'off') => {
+    const company = resolveCompanyName();
+    if (!company) {
+      setMachineControlError('無法取得公司資訊，請重新登入後再試。');
+      return;
+    }
+    setMachineControlLoading(action);
+    setMachineControlError(null);
+    setMachineControlMessage(null);
+    try {
+      const payload = { company, machine: MACHINE_TYPE };
+      const response = action === 'on' ? await machineOn(payload) : await machineOff(payload);
+      const defaultMsg = action === 'on' ? '機台已啟動' : '機台已關閉';
+      const message = typeof response?.message === 'string' ? response.message : defaultMsg;
+      setMachineControlMessage(message);
+    } catch (err: any) {
+      setMachineControlError(err?.message || '操作失敗，請稍後再試');
+    } finally {
+      setMachineControlLoading(null);
+    }
+  };
+
   // 返回主內容
   return (
     <>
@@ -199,6 +246,39 @@ const Home: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {hasMachineControl && (
+        <div className="bg-white shadow-sm p-4 mt-6 rounded-lg">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">遠端機台控制</h2>
+              <p className="text-sm text-gray-600">擁有 control_machine 權限的使用者可以直接操作機台電源</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleMachineControl('on')}
+                disabled={machineControlLoading !== null}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded transition-colors"
+              >
+                {machineControlLoading === 'on' ? '啟動中...' : '啟動機台'}
+              </button>
+              <button
+                onClick={() => handleMachineControl('off')}
+                disabled={machineControlLoading !== null}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded transition-colors"
+              >
+                {machineControlLoading === 'off' ? '關閉中...' : '關閉機台'}
+              </button>
+            </div>
+          </div>
+          {machineControlMessage && (
+            <div className="mt-3 text-sm text-emerald-600">{machineControlMessage}</div>
+          )}
+          {machineControlError && (
+            <div className="mt-3 text-sm text-red-600">{machineControlError}</div>
+          )}
+        </div>
+      )}
       
       {/* 內容區域 */}
       <div className="p-6">

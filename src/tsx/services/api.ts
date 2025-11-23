@@ -675,6 +675,32 @@ export async function deleteLab(payload: DeleteLabRequest): Promise<{ message: s
   });
 }
 
+// 11. 機台控制
+export interface MachineControlRequest {
+  company: string;
+  machine: string;
+}
+
+export interface MachineControlResponse {
+  message?: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
+export async function machineOn(payload: MachineControlRequest): Promise<MachineControlResponse> {
+  return apiCall<MachineControlResponse>('/machineOn', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function machineOff(payload: MachineControlRequest): Promise<MachineControlResponse> {
+  return apiCall<MachineControlResponse>('/machineOff', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 // WebSocket 連接管理
 export class WebSocketService {
   private ws: WebSocket | null = null;
@@ -1144,4 +1170,14 @@ export async function deleteUser(payload: DeleteUserRequest): Promise<{ message:
     method: 'POST',
     body: JSON.stringify(payload)
   });
+}
+
+// 18. Session 狀態檢查
+export interface ProtectedStatusResponse {
+  message: string;
+  user?: Record<string, unknown>;
+}
+
+export async function getProtectedStatus(): Promise<ProtectedStatusResponse> {
+  return apiCall<ProtectedStatusResponse>('/protected');
 }

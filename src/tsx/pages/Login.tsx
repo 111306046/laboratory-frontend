@@ -88,7 +88,7 @@ const Login: React.FC = () => {
           'view_data', 'create_user', 'modify_user', 'get_users',
           'modify_lab', 'get_labs',
           'change_password',
-          'set_thresholds', 'modify_notification'
+          'set_thresholds', 'modify_notification','control_machine'
         ];
         localStorage.setItem('user_permissions', JSON.stringify(superPerms));
         localStorage.setItem('is_superuser', 'true');

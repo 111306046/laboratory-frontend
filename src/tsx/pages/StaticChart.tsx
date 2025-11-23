@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
-import { BarChart3, RefreshCw, Calendar, Download, Wifi, WifiOff, CheckCircle, XCircle, AlertTriangle, TrendingUp, Activity, Thermometer } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
+import { BarChart3, RefreshCw, Calendar, Wifi, WifiOff, CheckCircle, XCircle, AlertTriangle, Activity, Thermometer } from 'lucide-react';
 import { searchData, SensorData, formatDateTime, parseExcelToSensorData } from '../services/api';
 
 // 統計數據介面
@@ -21,12 +21,30 @@ interface StatisticsData {
   }>;
   dailyTrends: Array<{
     date: string;
+    // CO₂
     avgCO2: number;
     maxCO2: number;
     minCO2: number;
+    // 濕度
     avgHumidity: number;
+    maxHumidity: number;
+    minHumidity: number;
+    // 溫度
+    avgTemperature: number;
+    maxTemperature: number;
+    minTemperature: number;
+    // PM2.5
     avgPM25: number;
+    maxPM25: number;
+    minPM25: number;
+    // PM10
+    avgPM10: number;
+    maxPM10: number;
+    minPM10: number;
+    // TVOC
     avgTVOC: number;
+    maxTVOC: number;
+    minTVOC: number;
   }>;
   parameterRanges: Array<{
     parameter: string;
@@ -82,25 +100,37 @@ const StaticChart: React.FC = () => {
   };
 
   // 工具：依小時分組（本地時區），回傳近 24 小時的平均值序列
-  const buildHourlySeries = (sensorData: SensorData[]) => {
+const buildHourlySeries = (sensorData: SensorData[], maxPoints: number) => {
     // 依時間排序
     const sorted = [...sensorData].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    const byHour = new Map<string, SensorData[]>();
-    sorted.forEach(d => {
-      const dt = new Date(d.timestamp);
-      const key = `${String(dt.getHours()).padStart(2, '0')}:00`;
-      const list = byHour.get(key) || [];
-      list.push(d);
-      byHour.set(key, list);
+  const byHour = new Map<string, { readings: SensorData[]; label: string }>();
+  sorted.forEach(d => {
+    const dt = new Date(d.timestamp);
+    const key = dt.toISOString().slice(0, 13); // yyyy-mm-ddThh
+    const label = dt.toLocaleString('zh-TW', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
     });
-    // 取最後 24 個小時鍵（以插入順序為準）
-    const keys = Array.from(byHour.keys());
-    const lastKeys = keys.slice(-24);
-    return lastKeys.map(k => {
-      const list = byHour.get(k) || [];
+    if (!byHour.has(key)) {
+      byHour.set(key, { readings: [], label });
+    }
+    byHour.get(key)!.readings.push(d);
+  });
+  const keys = Array.from(byHour.keys());
+  const limit = Math.min(keys.length, maxPoints);
+  const lastKeys = keys.slice(-limit);
+  return lastKeys.map(k => {
+    const entry = byHour.get(k);
+    if (!entry) {
+      return { time: k, co2: 0, humidity: 0, temperature: 0, pm25: 0, pm10: 0, tvoc: 0 };
+    }
+    const list = entry.readings;
       const avg = (arr: number[]) => (arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0);
       return {
-        time: k,
+      time: entry.label,
         co2: Math.round(avg(list.map(i => i.co2))),
         humidity: Math.round(avg(list.map(i => i.humidity)) * 10) / 10,
         temperature: Math.round(avg(list.map(i => i.temperatu)) * 10) / 10,
@@ -111,38 +141,71 @@ const StaticChart: React.FC = () => {
     });
   };
 
-  // 工具：依日期分組（本地時區），回傳最近 7 天的各指標
-  const buildDailyTrends = (sensorData: SensorData[]) => {
-    const sorted = [...sensorData].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    const byDay = new Map<string, SensorData[]>();
-    sorted.forEach(d => {
-      const dt = new Date(d.timestamp);
-      const key = `${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-      const list = byDay.get(key) || [];
-      list.push(d);
-      byDay.set(key, list);
-    });
-    const keys = Array.from(byDay.keys());
-    const lastKeys = keys.slice(-7);
-    return lastKeys.map(k => {
-      const list = byDay.get(k) || [];
-      const nums = (sel: (d: SensorData) => number) => list.map(sel);
-      const avg = (arr: number[]) => (arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0);
-      const co2Arr = nums(d => d.co2);
-      return {
-        date: k,
-        avgCO2: Math.round(avg(co2Arr)),
-        maxCO2: Math.round(co2Arr.length ? Math.max(...co2Arr) : 0),
-        minCO2: Math.round(co2Arr.length ? Math.min(...co2Arr) : 0),
-        avgHumidity: Math.round(avg(nums(d => d.humidity)) * 10) / 10,
-        avgPM25: Math.round(avg(nums(d => d.pm25)) * 10) / 10,
-        avgTVOC: Math.round(avg(nums(d => d.tvoc)) * 1000) / 1000
-      };
-    });
-  };
+// 工具：依日期分組（本地時區），回傳最近 7 天的各指標（含平均 / 最高 / 最低）
+const buildDailyTrends = (sensorData: SensorData[]) => {
+  const sorted = [...sensorData].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
+  const byDay = new Map<string, SensorData[]>();
+  sorted.forEach(d => {
+    const dt = new Date(d.timestamp);
+    const key = `${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(
+      2,
+      '0'
+    )}`;
+    const list = byDay.get(key) || [];
+    list.push(d);
+    byDay.set(key, list);
+  });
+  const keys = Array.from(byDay.keys());
+  const lastKeys = keys.slice(-7);
+  return lastKeys.map(k => {
+    const list = byDay.get(k) || [];
+    const nums = (sel: (d: SensorData) => number) => list.map(sel);
+    const avg = (arr: number[]) =>
+      arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+    const max = (arr: number[]) => (arr.length ? Math.max(...arr) : 0);
+    const min = (arr: number[]) => (arr.length ? Math.min(...arr) : 0);
+
+    const co2Arr = nums(d => d.co2);
+    const humArr = nums(d => d.humidity);
+    const tempArr = nums(d => d.temperatu);
+    const pm25Arr = nums(d => d.pm25);
+    const pm10Arr = nums(d => d.pm10);
+    const tvocArr = nums(d => d.tvoc);
+
+    return {
+      date: k,
+      // CO₂
+      avgCO2: Math.round(avg(co2Arr)),
+      maxCO2: Math.round(max(co2Arr)),
+      minCO2: Math.round(min(co2Arr)),
+      // 濕度
+      avgHumidity: Math.round(avg(humArr) * 10) / 10,
+      maxHumidity: Math.round(max(humArr) * 10) / 10,
+      minHumidity: Math.round(min(humArr) * 10) / 10,
+      // 溫度
+      avgTemperature: Math.round(avg(tempArr) * 10) / 10,
+      maxTemperature: Math.round(max(tempArr) * 10) / 10,
+      minTemperature: Math.round(min(tempArr) * 10) / 10,
+      // PM2.5
+      avgPM25: Math.round(avg(pm25Arr) * 10) / 10,
+      maxPM25: Math.round(max(pm25Arr) * 10) / 10,
+      minPM25: Math.round(min(pm25Arr) * 10) / 10,
+      // PM10
+      avgPM10: Math.round(avg(pm10Arr) * 10) / 10,
+      maxPM10: Math.round(max(pm10Arr) * 10) / 10,
+      minPM10: Math.round(min(pm10Arr) * 10) / 10,
+      // TVOC
+      avgTVOC: Math.round(avg(tvocArr) * 1000) / 1000,
+      maxTVOC: Math.round(max(tvocArr) * 1000) / 1000,
+      minTVOC: Math.round(min(tvocArr) * 1000) / 1000
+    };
+  });
+};
 
   // 將原始數據轉換為圖表數據
-  const processDataForCharts = (sensorData: SensorData[]): StatisticsData => {
+const processDataForCharts = (sensorData: SensorData[], rangeHours: number): StatisticsData => {
     if (sensorData.length === 0) {
       return {
         hourlyData: [],
@@ -163,8 +226,7 @@ const StaticChart: React.FC = () => {
       };
     }
 
-    // 以實際資料建構 24 小時序列
-    const hourlyData = buildHourlySeries(sensorData);
+  const hourlyData = buildHourlySeries(sensorData, rangeHours);
 
     // 環境質量評估（基於多個參數）
     const total = sensorData.length;
@@ -310,6 +372,8 @@ const StaticChart: React.FC = () => {
         const machine = localStorage.getItem('machine') || 'aq';
 
         // 使用區間查詢 API（後端期望 YYYY-MM-DD HH:MM:SS）
+        let sensorData: SensorData[] = [];
+
         const result = await searchData({
           company_lab: companyLab,
           machine,
@@ -317,9 +381,8 @@ const StaticChart: React.FC = () => {
           end: formatDateTime(now),
           format: 'json'
         });
-        let sensorData: SensorData[];
+
         if (result && typeof result === 'object' && 'type' in result) {
-          // 後端回傳 Excel，轉成 SensorData[]
           sensorData = await parseExcelToSensorData(result);
         } else {
           sensorData = result as SensorData[];
@@ -327,17 +390,8 @@ const StaticChart: React.FC = () => {
 
         setRawData(sensorData);
         
-        if (!sensorData.length) {
-          setData(null);
-          setConnectionStatus('connected');
-          setLastSync(new Date());
-          setError('查無符合條件的資料');
-          setSuccessMessage('');
-          return;
-        }
-        
         // 將原始數據轉換為圖表數據
-        const chartData = processDataForCharts(sensorData);
+        const chartData = processDataForCharts(sensorData, hours);
         setData(chartData);
         
         setConnectionStatus('connected');
@@ -361,22 +415,6 @@ const StaticChart: React.FC = () => {
   const handleRefresh = () => {
     setError('');
     setSuccessMessage('');
-  };
-
-  const exportChart = () => {
-    const csvContent = data?.hourlyData.map(item => 
-      Object.values(item).join(',')
-    ).join('\n');
-    
-    if (csvContent) {
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `lab-statistics-${new Date().toISOString().split('T')[0]}.csv`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-    }
   };
 
   // 自定義圓餅圖標籤
@@ -404,8 +442,14 @@ const StaticChart: React.FC = () => {
     );
   }
 
+  const rangeLabelMap: Record<string, string> = {
+    '24h': '過去 24 小時',
+    '7d': '過去 7 天',
+    '30d': '過去 30 天'
+  };
+  const primaryRangeLabel = rangeLabelMap[selectedTimeRange] || '過去 24 小時';
+
   const hasHourlyData = (data?.hourlyData?.length || 0) > 0;
-  const hasDailyTrendData = (data?.dailyTrends?.length || 0) > 0;
   const hasParameterRangeData = (data?.parameterRanges || []).some(range => (range.excellent + range.good + range.fair + range.poor) > 0);
   const hasStatusDistributionData = (data?.statusDistribution || []).some(item => item.value > 0);
 
@@ -444,15 +488,6 @@ const StaticChart: React.FC = () => {
                 disabled={isLoading}
               >
                 <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-              </button>
-              
-              <button
-                onClick={exportChart}
-                className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
-                disabled={!data}
-              >
-                <Download className="w-4 h-4 mr-2" />
-                導出數據
               </button>
               
               <div className="flex items-center gap-2">
@@ -505,6 +540,7 @@ const StaticChart: React.FC = () => {
               </div>
             </div>
           )}
+
         </div>
 
         {data && (
@@ -516,7 +552,7 @@ const StaticChart: React.FC = () => {
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
                     <Activity className="w-5 h-5" />
-                    24小時環境參數趨勢
+                    {primaryRangeLabel}環境參數趨勢
                   </h2>
                   <select
                     value={selectedParameter}
@@ -564,39 +600,6 @@ const StaticChart: React.FC = () => {
                   </div>
                 ) : (
                   renderEmptyChartState('目前尚無 24 小時趨勢資料')
-                )}
-              </div>
-
-              {/* 7日趨勢對比 */}
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5" />
-                  7日 CO₂ 濃度趨勢
-                </h2>
-                {hasDailyTrendData ? (
-                  <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={data.dailyTrends}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                        <XAxis dataKey="date" stroke="#6B7280" fontSize={12} />
-                        <YAxis stroke="#6B7280" fontSize={12} />
-                        <Tooltip 
-                          contentStyle={{
-                            backgroundColor: 'white',
-                            border: '1px solid #E5E7EB',
-                            borderRadius: '8px',
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                          }}
-                        />
-                        <Legend />
-                        <Line type="monotone" dataKey="avgCO2" stroke="#3B82F6" strokeWidth={2} name="平均值" />
-                        <Line type="monotone" dataKey="maxCO2" stroke="#EF4444" strokeWidth={2} name="最高值" />
-                        <Line type="monotone" dataKey="minCO2" stroke="#10B981" strokeWidth={2} name="最低值" />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  renderEmptyChartState('目前尚無 7 日趨勢資料')
                 )}
               </div>
 

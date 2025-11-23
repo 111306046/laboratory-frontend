@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { canAccessAlertFeature, isSuperUserAccount } from '../utils/accessControl';
+import { getProtectedStatus } from '../services/api';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -17,21 +18,35 @@ interface UserInfo {
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredPermission }) => {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionStatus, setSessionStatus] = useState<'idle' | 'checking' | 'active' | 'expired'>('idle');
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   // 檢查是否有 token
   const token = localStorage.getItem('token');
+
+  const handleSessionLogout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user_account');
+      localStorage.removeItem('user_permissions');
+    }
+    window.location.href = '/login';
+  };
 
   // 獲取用戶資訊和權限
   useEffect(() => {
     // 如果沒有 token，不需要獲取用戶資訊
     if (!token) {
       setIsLoading(false);
+      setSessionStatus('idle');
       return;
     }
-    
-    const fetchUserInfo = async () => {
+
+    let isMounted = true;
+
+    const fetchUserInfo = () => {
       try {
-        // 直接使用 localStorage 中的權限資訊，不呼叫不存在的 API
         const userAccount = localStorage.getItem('user_account') || '用戶';
         const userPermissions = localStorage.getItem('user_permissions');
         
@@ -48,6 +63,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredPermi
           }
         }
         
+        if (!isMounted) return;
         setUserInfo({
           user_id: userAccount,
           name: userAccount,
@@ -56,14 +72,35 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredPermi
         });
       } catch (error) {
         console.error('獲取用戶資訊失敗:', error);
-        // 錯誤時清除用戶資訊
+        if (!isMounted) return;
         setUserInfo(null);
       } finally {
+        if (!isMounted) return;
         setIsLoading(false);
       }
     };
 
+    const verifySession = async () => {
+      setSessionStatus('checking');
+      try {
+        await getProtectedStatus();
+        if (!isMounted) return;
+        setSessionStatus('active');
+        setSessionError(null);
+      } catch (error: any) {
+        if (!isMounted) return;
+        const message = error?.message || '登入狀態驗證失敗，請重新登入';
+        setSessionStatus('expired');
+        setSessionError(message);
+      }
+    };
+
     fetchUserInfo();
+    verifySession();
+
+    return () => {
+      isMounted = false;
+    };
   }, [token]);
 
   // 如果沒有 token，重定向到登入頁面（在 hooks 之後檢查）
@@ -76,6 +113,23 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredPermi
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (sessionStatus === 'expired') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="bg-white rounded-lg shadow-lg p-6 max-w-md text-center">
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">登入狀態已失效</h2>
+          <p className="text-gray-600 mb-4">{sessionError || '請重新登入以繼續使用系統'}</p>
+          <button
+            onClick={handleSessionLogout}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            重新登入
+          </button>
+        </div>
       </div>
     );
   }

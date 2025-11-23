@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Bell, Settings, Save, AlertTriangle, CheckCircle, XCircle, Wifi, WifiOff, RefreshCw } from 'lucide-react';
-import { generateBindingCode, getThresholdBySensor, setThresholds } from '../services/api';
+import { generateBindingCode, getThresholdBySensor, setThresholds, deleteThresholds } from '../services/api';
 import { getUserAllowNotify } from '../utils/accessControl';
 import botQR from '../../assets/bot QR.png';
 
@@ -413,18 +413,47 @@ const Alert = () => {
         setError('無法獲取 lab 信息，無法刪除警報設定');
         return;
       }
-      
-      // 將特定感測器的閾值設為 null，實現刪除效果
-      // 注意：sensor 參數是機器類型，sensorType 是感測器類型
-      await setThresholds({
-        company,
-        lab,
-        sensor: machineType,      // 機器類型，如 "aq"
-        sensorType: sensorType,   // 感測器類型，如 "temperature"
-        min: null,
-        max: null,
-        enabled: false
-      });
+
+      // 取得現有閾值，以便刪除指定感測器並保留其他設定
+      let currentThresholds: Record<string, any> | null = null;
+      try {
+        const currentResult = await getThresholdBySensor({ company, lab, sensor: machineType });
+        if (currentResult && currentResult.threshold) {
+          currentThresholds = currentResult.threshold as Record<string, any>;
+        }
+      } catch (thresholdError) {
+        console.warn('取得閾值資料失敗，仍嘗試刪除指定項目', thresholdError);
+      }
+
+      if (!currentThresholds || !(sensorType in currentThresholds)) {
+        await loadAlerts();
+        return;
+      }
+
+      const remainingThresholds = Object.fromEntries(
+        Object.entries(currentThresholds).filter(([key]) => key !== sensorType)
+      );
+
+      // 刪除整份閾值文件
+      await deleteThresholds({ company, lab, sensor: machineType });
+
+      // 若還有其他感測器設定，需要重新寫回資料庫，避免全數遺失
+      const remainingEntries = Object.entries(remainingThresholds).filter(
+        ([, value]) => !!value && typeof value === 'object'
+      );
+
+      if (remainingEntries.length > 0) {
+        const [nextSensorKey, nextConfig] = remainingEntries[0];
+        await setThresholds({
+          company,
+          lab,
+          sensor: machineType,
+          sensorType: nextSensorKey,
+          min: typeof nextConfig?.min === 'number' ? nextConfig.min : null,
+          max: typeof nextConfig?.max === 'number' ? nextConfig.max : null,
+          enabled: typeof nextConfig?.enabled === 'boolean' ? nextConfig.enabled : true
+        }, remainingThresholds);
+      }
       
       // 重新載入警報列表
       await loadAlerts();

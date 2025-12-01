@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from '../services/api';
-import { setUserAllowNotify } from '../utils/accessControl';
+import { setUserAllowNotify, isSuperUserAccount } from '../utils/accessControl';
 
 // 使用新的 API 服務，移除舊的 api 函數
 
@@ -82,7 +82,9 @@ const Login: React.FC = () => {
       }
 
       // 優先使用後端登入回傳的權限與公司（若提供）
-      if (account === 'yezyez') {
+      const isSuperUserLogin = isSuperUserAccount(account);
+
+      if (isSuperUserLogin) {
         // yezyez 擁有所有權限（func_auth + extra_func_auth）
         const superPerms = [
           'view_data', 'create_user', 'modify_user', 'get_users',
@@ -165,7 +167,7 @@ const Login: React.FC = () => {
         }
       }
       
-      navigate('/dashboard');
+      navigate(isSuperUserLogin ? '/manage-company' : '/dashboard');
     } catch (err: any) {
       setError(err?.message || '登入失敗');
       console.error('登入失敗:', err);
@@ -214,23 +216,6 @@ const Login: React.FC = () => {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
-          </div>
-          
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center">
-              <input
-                id="remember"
-                type="checkbox"
-                className="h-4 w-4 text-blue-600 border-gray-300 rounded"
-              />
-              <label htmlFor="remember" className="ml-2 text-sm text-gray-600">
-                記住我
-              </label>
-            </div>
-            
-            <a href="#" className="text-sm text-blue-600 hover:underline">
-              忘記密碼？
-            </a>
           </div>
           
           <button

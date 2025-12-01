@@ -167,7 +167,7 @@ const ManageCompany: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="bg-white rounded-lg shadow-lg p-6 max-w-md text-center">
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">僅限超級使用者</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">僅限系統管理員</h2>
           <p className="text-gray-600 mb-4">您沒有權限訪問公司管理頁面</p>
           <button
             onClick={() => window.location.href = '/dashboard'}

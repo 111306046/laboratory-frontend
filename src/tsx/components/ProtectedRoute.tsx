@@ -55,7 +55,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredPermi
         if (userPermissions) {
           const permissions = JSON.parse(userPermissions);
           if (permissions.includes('create_user')) {
-            userRole = isSuperUser ? '超級使用者' : '管理員';
+            userRole = isSuperUser ? '系統管理員' : '管理員';
           } else if (permissions.includes('modify_lab')) {
             userRole = '實驗室管理員';
           } else if (permissions.includes('view_data')) {

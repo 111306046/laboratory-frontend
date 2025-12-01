@@ -49,7 +49,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         
         if (permissions.includes('create_user')) {
           const isSuperUser = isSuperUserAccount(userAccount);
-          userRole = isSuperUser ? '超級使用者' : '管理員';
+          userRole = isSuperUser ? '系統管理員' : '管理員';
         } else if (permissions.includes('modify_lab') || permissions.includes('get_labs')) {
           userRole = '實驗室管理員';
         } else if (permissions.includes('view_data')) {
@@ -97,10 +97,21 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
 
   // 根據權限過濾導航項目
   const getFilteredNavItems = (): NavItem[] => {
+    const isSuperUser = isSuperUserAccount(userInfo.user_id);
+
+    if (isSuperUser) {
+      const superNavItems: NavItem[] = [
+        { title: '公司管理', path: '/manage-company', icon: <FiSettings size={20} />, requiredPermission: 'superuser' },
+        { title: '用戶管理', path: '/PU-addusers', icon: <FiUser size={20} />, requiredPermission: 'get_users' },
+        { title: '實驗室管理', path: '/PU-laboratarymnagement', icon: <FiSettings size={20} />, requiredPermission: 'get_labs' },
+      ];
+      return superNavItems.filter(item => hasPermission(item.requiredPermission));
+    }
+
     const allNavItems: NavItem[] = [
-      { title: '首頁', path: '/dashboard', icon: <FiHome size={20} />, requiredPermission: 'none' }, // 所有人都可以訪問
+      { title: '首頁', path: '/dashboard', icon: <FiHome size={20} />, requiredPermission: 'none' },
       { title: '數據記錄', path: '/data-records', icon: <FiDatabase size={20} />, requiredPermission: 'view_data' },
-      { title: '警報設置', path: '/alert', icon: <FiAlertCircle size={20} />, requiredPermission: 'set_thresholds' }, // 允許 set_thresholds 或 modify_lab
+      { title: '警報設置', path: '/alert', icon: <FiAlertCircle size={20} />, requiredPermission: 'set_thresholds' },
       { title: '統計圖表', path: '/static-chart', icon: <FiBarChart2 size={20} />, requiredPermission: 'view_data' },
       { title: '用戶管理', path: '/PU-addusers', icon: <FiUser size={20} />, requiredPermission: 'get_users' },
       { title: '實驗室管理', path: '/PU-laboratarymnagement', icon: <FiSettings size={20} />, requiredPermission: 'get_labs' },
@@ -108,7 +119,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     ];
 
     return allNavItems.filter(item => {
-      if (item.requiredPermission === 'none') return true; // 首頁所有人都可以訪問
+      if (item.requiredPermission === 'none') return true;
       return hasPermission(item.requiredPermission);
     });
   };

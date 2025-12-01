@@ -413,7 +413,7 @@ const Alert = () => {
         setError('無法獲取 lab 信息，無法刪除警報設定');
         return;
       }
-
+      
       // 取得現有閾值，以便刪除指定感測器並保留其他設定
       let currentThresholds: Record<string, any> | null = null;
       try {
@@ -444,9 +444,9 @@ const Alert = () => {
 
       if (remainingEntries.length > 0) {
         const [nextSensorKey, nextConfig] = remainingEntries[0];
-        await setThresholds({
-          company,
-          lab,
+      await setThresholds({
+        company,
+        lab,
           sensor: machineType,
           sensorType: nextSensorKey,
           min: typeof nextConfig?.min === 'number' ? nextConfig.min : null,

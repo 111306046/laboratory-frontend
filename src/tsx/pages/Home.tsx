@@ -129,77 +129,81 @@ const Home: React.FC = () => {
       }
     };
 
-    // 設置 WebSocket 連接
-    const setupWebSocket = () => {
-      wsService.connect(token, companyLab, machine);
-      
-      wsService.on('connected', () => {
-        setWsConnected(true);
-        setError(''); // 連接成功時清除錯誤
-        console.log('WebSocket 已連接');
-      });
-      
-      wsService.on('disconnected', () => {
-        setWsConnected(false);
-        console.log('WebSocket 已斷開');
-      });
-      
-      wsService.on('data', (data: any) => {
-        try {
-          // WebSocket 數據可能在 values 對象中，也可能直接在頂層
-          const sensorData: SensorData = data.values ? {
-            timestamp: data.timestamp || new Date().toISOString(),
-            machine: data.machine || machine,
-            temperatu: data.values.temperature ?? data.values.temperatu ?? data.temperatu ?? 0,
-            humidity: data.values.humidity ?? data.humidity ?? 0,
-            pm25: data.values.pm25 ?? data.pm25 ?? 0,
-            pm10: data.values.pm10 ?? data.pm10 ?? 0,
-            pm25_ave: data.values.pm25_average ?? data.values.pm25_ave ?? data.pm25_ave ?? 0,
-            pm10_ave: data.values.pm10_average ?? data.values.pm10_ave ?? data.pm10_ave ?? 0,
-            co2: data.values.co2 ?? data.co2 ?? 0,
-            tvoc: data.values.tvoc ?? data.tvoc ?? 0
-          } : {
-            timestamp: data.timestamp || new Date().toISOString(),
-            machine: data.machine || machine,
-            temperatu: data.temperatu ?? data.temperature ?? 0,
-            humidity: data.humidity ?? 0,
-            pm25: data.pm25 ?? 0,
-            pm10: data.pm10 ?? 0,
-            pm25_ave: data.pm25_ave ?? data.pm25_average ?? 0,
-            pm10_ave: data.pm10_ave ?? data.pm10_average ?? 0,
-            co2: data.co2 ?? 0,
-            tvoc: data.tvoc ?? 0
-          };
-
-          // 更新即時數據
-          setLabData({
-            temperature: Math.round(sensorData.temperatu * 10) / 10,
-            humidity: Math.round(sensorData.humidity * 10) / 10,
-            pm25: Math.round(sensorData.pm25 * 10) / 10,
-            pm10: Math.round(sensorData.pm10 * 10) / 10,
-            pm25_ave: Math.round(sensorData.pm25_ave * 10) / 10,
-            pm10_ave: Math.round(sensorData.pm10_ave * 10) / 10,
-            co2: Math.round(sensorData.co2),
-            tvoc: Math.round(sensorData.tvoc * 1000) / 1000
-          });
-          setLastUpdate(new Date());
-        } catch (err) {
-          console.error('處理 WebSocket 數據失敗:', err);
-        }
-      });
-      
-      wsService.on('error', (error: any) => {
-        console.error('WebSocket 錯誤:', error);
-        setError('WebSocket 連接錯誤');
-        setWsConnected(false);
-      });
+    fetchInitialData();
+    
+    const handleConnected = () => {
+      setWsConnected(true);
+      setError('');
     };
 
-    fetchInitialData();
-    setupWebSocket();
+    const handleDisconnected = () => {
+      setWsConnected(false);
+    };
+
+    const handleWsError = (error: any) => {
+      console.error('WebSocket 錯誤:', error);
+      setError('WebSocket 連接錯誤');
+      setWsConnected(false);
+    };
+
+    const handleWsData = (data: any) => {
+      try {
+        const sensorData: SensorData = data.values ? {
+          timestamp: data.timestamp || new Date().toISOString(),
+          machine: data.machine || machine,
+          temperatu: data.values.temperature ?? data.values.temperatu ?? data.temperatu ?? 0,
+          humidity: data.values.humidity ?? data.humidity ?? 0,
+          pm25: data.values.pm25 ?? data.pm25 ?? 0,
+          pm10: data.values.pm10 ?? data.pm10 ?? 0,
+          pm25_ave: data.values.pm25_average ?? data.values.pm25_ave ?? data.pm25_ave ?? 0,
+          pm10_ave: data.values.pm10_average ?? data.values.pm10_ave ?? data.pm10_ave ?? 0,
+          co2: data.values.co2 ?? data.co2 ?? 0,
+          tvoc: data.values.tvoc ?? data.tvoc ?? 0
+        } : {
+          timestamp: data.timestamp || new Date().toISOString(),
+          machine: data.machine || machine,
+          temperatu: data.temperatu ?? data.temperature ?? 0,
+          humidity: data.humidity ?? 0,
+          pm25: data.pm25 ?? 0,
+          pm10: data.pm10 ?? 0,
+          pm25_ave: data.pm25_ave ?? data.pm25_average ?? 0,
+          pm10_ave: data.pm10_ave ?? data.pm10_average ?? 0,
+          co2: data.co2 ?? 0,
+          tvoc: data.tvoc ?? 0
+        };
+
+        setLabData({
+          temperature: Math.round(sensorData.temperatu * 10) / 10,
+          humidity: Math.round(sensorData.humidity * 10) / 10,
+          pm25: Math.round(sensorData.pm25 * 10) / 10,
+          pm10: Math.round(sensorData.pm10 * 10) / 10,
+          pm25_ave: Math.round(sensorData.pm25_ave * 10) / 10,
+          pm10_ave: Math.round(sensorData.pm10_ave * 10) / 10,
+          co2: Math.round(sensorData.co2),
+          tvoc: Math.round(sensorData.tvoc * 1000) / 1000
+        });
+        setLastUpdate(new Date());
+      } catch (err) {
+        console.error('處理 WebSocket 數據失敗:', err);
+      }
+    };
+
+    wsService.on('connected', handleConnected);
+    wsService.on('disconnected', handleDisconnected);
+    wsService.on('data', handleWsData);
+    wsService.on('error', handleWsError);
+    wsService.connect(token, companyLab, machine);
+
+    if (wsService.isConnected) {
+      handleConnected();
+    }
 
     // 清理函數
     return () => {
+      wsService.off('connected', handleConnected);
+      wsService.off('disconnected', handleDisconnected);
+      wsService.off('data', handleWsData);
+      wsService.off('error', handleWsError);
       wsService.disconnect();
     };
   }, []);

@@ -143,10 +143,15 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       console.error('登出 API 調用失敗:', error);
     } finally {
       // 無論 API 調用成功與否，都清除本地存儲並跳轉
-      localStorage.removeItem('token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('user_account');
-      localStorage.removeItem('user_permissions');
+      try {
+        localStorage.clear();
+      } catch (clearErr) {
+        console.warn('localStorage 清除失敗，改為逐一移除', clearErr);
+        localStorage.removeItem('token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user_account');
+        localStorage.removeItem('user_permissions');
+      }
       setUserAllowNotify(false);
       navigate('/login');
     }

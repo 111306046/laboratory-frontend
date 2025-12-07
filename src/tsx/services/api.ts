@@ -680,25 +680,27 @@ export async function deleteLab(payload: DeleteLabRequest): Promise<{ message: s
 export interface MachineControlRequest {
   company: string;
   machine: string;
+  action?: 'on' | 'off';
 }
 
 export interface MachineControlResponse {
   message?: string;
   status?: string;
+  action?: 'on' | 'off';
   [key: string]: unknown;
 }
 
 export async function machineOn(payload: MachineControlRequest): Promise<MachineControlResponse> {
   return apiCall<MachineControlResponse>('/machineOn', {
     method: 'POST',
-    body: JSON.stringify(payload)
+    body: JSON.stringify({ ...payload, action: 'on' })
   });
 }
 
 export async function machineOff(payload: MachineControlRequest): Promise<MachineControlResponse> {
   return apiCall<MachineControlResponse>('/machineOff', {
     method: 'POST',
-    body: JSON.stringify(payload)
+    body: JSON.stringify({ ...payload, action: 'off' })
   });
 }
 

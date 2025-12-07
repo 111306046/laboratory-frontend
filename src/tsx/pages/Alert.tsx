@@ -36,7 +36,6 @@ const Alert = () => {
   });
   
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connected');
   const [lastSync, setLastSync] = useState(new Date());
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -444,9 +443,9 @@ const Alert = () => {
 
       if (remainingEntries.length > 0) {
         const [nextSensorKey, nextConfig] = remainingEntries[0];
-      await setThresholds({
-        company,
-        lab,
+        await setThresholds({
+          company,
+          lab,
           sensor: machineType,
           sensorType: nextSensorKey,
           min: typeof nextConfig?.min === 'number' ? nextConfig.min : null,
@@ -503,42 +502,6 @@ const Alert = () => {
       setBindingLoading(false);
     }
   };
-
-  // 發送 LINE 測試通知（假後端）
-  const sendTestLineNotify = async () => {
-    try {
-      setSaving(true);
-      const company =
-        localStorage.getItem('company_name') ||
-        localStorage.getItem('company') ||
-        localStorage.getItem('lab') ||
-        'NCCU';
-      const message = `【警報測試】${company} 實驗室\n` +
-        alerts
-          .filter(a => a.enabled)
-          .map(a => `${a.name}: ${a.minValue} ~ ${a.maxValue} ${a.unit}`)
-          .join('\n');
-
-      // 呼叫假後端接口（本地 mock），若無後端則不報錯
-      try {
-        await apiCall('/alerts/notify', {
-          method: 'POST',
-          body: JSON.stringify({ message, priority: 'medium', company_lab: company })
-        });
-      } catch (e) {
-        // 若本地 mock 不存在，視為成功（純前端 demo）
-      }
-
-      setShowSaveModal(true);
-      setTimeout(() => setShowSaveModal(false), 1500);
-    } catch (err) {
-      setError('發送測試通知失敗');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // 已移除優先級功能
 
   if (loading) {
     return (
@@ -646,68 +609,68 @@ const Alert = () => {
                   </div>
                 ) : (
                   alerts.map(alert => (
-                  <div key={alert.id} className={`border rounded-lg p-4 hover:shadow-md transition-shadow ${alert.enabled ? '' : 'opacity-60'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => toggleAlert(alert.id)}
-                          className={`w-10 h-6 rounded-full p-1 transition-colors ${
-                            alert.enabled ? 'bg-blue-600' : 'bg-gray-300'
-                          }`}
-                        >
-                          <div className={`w-4 h-4 bg-white rounded-full transition-transform ${
-                            alert.enabled ? 'translate-x-4' : 'translate-x-0'
-                          }`} />
-                        </button>
-                        <div>
-                          <h3 className="font-medium text-gray-900">{alert.name}</h3>
-                          {!alert.enabled && (
-                            <span className="inline-block px-2 py-1 text-xs rounded-full border bg-gray-100 text-gray-600 border-gray-200">
-                              已停用
-                            </span>
-                          )}
+                    <div key={alert.id} className={`border rounded-lg p-4 hover:shadow-md transition-shadow ${alert.enabled ? '' : 'opacity-60'}`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => toggleAlert(alert.id)}
+                            className={`w-10 h-6 rounded-full p-1 transition-colors ${
+                              alert.enabled ? 'bg-blue-600' : 'bg-gray-300'
+                            }`}
+                          >
+                            <div className={`w-4 h-4 bg-white rounded-full transition-transform ${
+                              alert.enabled ? 'translate-x-4' : 'translate-x-0'
+                            }`} />
+                          </button>
+                          <div>
+                            <h3 className="font-medium text-gray-900">{alert.name}</h3>
+                            {!alert.enabled && (
+                              <span className="inline-block px-2 py-1 text-xs rounded-full border bg-gray-100 text-gray-600 border-gray-200">
+                                已停用
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleDeleteAlert(alert.parameter)}
+                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                            title="刪除此警報設定"
+                          >
+                            <XCircle className="w-5 h-5" />
+                          </button>
                         </div>
                       </div>
                       
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleDeleteAlert(alert.parameter)}
-                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
-                          title="刪除此警報設定"
-                        >
-                          <XCircle className="w-5 h-5" />
-                        </button>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            最小值 ({alert.unit})
+                          </label>
+                          <input
+                            type="number"
+                            value={alert.minValue}
+                            onChange={(e) => updateAlert(alert.id, 'minValue', parseFloat(e.target.value))}
+                            className="w-full border rounded px-3 py-2 text-sm disabled:bg-gray-100"
+                            disabled={!alert.enabled}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            最大值 ({alert.unit})
+                          </label>
+                          <input
+                            type="number"
+                            value={alert.maxValue}
+                            onChange={(e) => updateAlert(alert.id, 'maxValue', parseFloat(e.target.value))}
+                            className="w-full border rounded px-3 py-2 text-sm disabled:bg-gray-100"
+                            disabled={!alert.enabled}
+                          />
+                        </div>
                       </div>
                     </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          最小值 ({alert.unit})
-                        </label>
-                        <input
-                          type="number"
-                          value={alert.minValue}
-                          onChange={(e) => updateAlert(alert.id, 'minValue', parseFloat(e.target.value))}
-                          className="w-full border rounded px-3 py-2 text-sm disabled:bg-gray-100"
-                          disabled={!alert.enabled}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          最大值 ({alert.unit})
-                        </label>
-                        <input
-                          type="number"
-                          value={alert.maxValue}
-                          onChange={(e) => updateAlert(alert.id, 'maxValue', parseFloat(e.target.value))}
-                          className="w-full border rounded px-3 py-2 text-sm disabled:bg-gray-100"
-                          disabled={!alert.enabled}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))
+                  ))
                 )}
               </div>
             </div>
@@ -809,26 +772,14 @@ const Alert = () => {
               </div>
             </div>
 
-            {/* 保存與測試通知按鈕 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* 保存按鈕 */}
+            <div className="mt-3">
               <button
                 onClick={saveSettings}
-                disabled={saving}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
               >
-                {saving ? (
-                  <RefreshCw className="w-5 h-5 animate-spin" />
-                ) : (
-                  <Save className="w-5 h-5" />
-                )}
-                {saving ? '保存中...' : '保存設置'}
-              </button>
-              <button
-                onClick={sendTestLineNotify}
-                disabled={saving}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white py-3 px-4 rounded-lg font-medium transition-colors"
-              >
-                發送 LINE 測試
+                <Save className="w-5 h-5" />
+                保存設置
               </button>
             </div>
           </div>
@@ -947,3 +898,4 @@ const Alert = () => {
 };
 
 export default Alert;
+

@@ -23,6 +23,42 @@ interface UserInfo {
   permissions: string[];
 }
 
+const STORAGE_KEYS_TO_CLEAR = [
+  'token',
+  'refresh_token',
+  'access_token',
+  'user_account',
+  'user_permissions',
+  'is_superuser',
+  'lab',
+  'company_lab',
+  'company',
+  'company_name',
+  'user_lab',
+  'company_extra_auth_map',
+  'sidebarOpen',
+  'line_bound',
+  'user_allow_notify',
+  'machine',
+  'favicon_url'
+] as const;
+
+const clearStoredSession = () => {
+  if (typeof window === 'undefined') return;
+  STORAGE_KEYS_TO_CLEAR.forEach((key) => {
+    try {
+      window.localStorage.removeItem(key);
+    } catch (err) {
+      console.warn(`移除 localStorage 鍵 ${key} 失敗`, err);
+    }
+  });
+  try {
+    window.sessionStorage.clear();
+  } catch (err) {
+    console.warn('sessionStorage 清除失敗', err);
+  }
+};
+
 const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const navigate = useNavigate();
   const [userInfo, setUserInfo] = useState<UserInfo>({ 
@@ -143,15 +179,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       console.error('登出 API 調用失敗:', error);
     } finally {
       // 無論 API 調用成功與否，都清除本地存儲並跳轉
-      try {
-        localStorage.clear();
-      } catch (clearErr) {
-        console.warn('localStorage 清除失敗，改為逐一移除', clearErr);
-        localStorage.removeItem('token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user_account');
-        localStorage.removeItem('user_permissions');
-      }
+      clearStoredSession();
       setUserAllowNotify(false);
       navigate('/login');
     }

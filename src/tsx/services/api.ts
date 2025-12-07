@@ -81,6 +81,7 @@ export interface LabInfo {
   name: string;
   company: string;
   description: string;
+  delete_time?: string | null;
   sensors: Array<{
     name: string;
     description: string;

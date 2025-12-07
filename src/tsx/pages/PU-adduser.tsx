@@ -43,8 +43,6 @@ const AdminManagement = () => {
   const [error, setError] = useState('');
   
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterRole, setFilterRole] = useState('all');
-  const [filterCompany, setFilterCompany] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -62,6 +60,11 @@ const AdminManagement = () => {
   // 實驗室列表
   const [labs, setLabs] = useState<LabInfo[]>([]);
   const [loadingLabs, setLoadingLabs] = useState(false);
+
+  const activeLabs = useMemo(
+    () => labs.filter(lab => !lab.delete_time),
+    [labs]
+  );
 
   // 角色選項
   const roleOptions = [
@@ -176,8 +179,8 @@ const AdminManagement = () => {
 
   // 根據公司過濾實驗室（不區分大小寫）
   const filteredLabs = newUser.company 
-    ? labs.filter(lab => lab.company.toLowerCase() === newUser.company.toLowerCase())
-    : labs;
+    ? activeLabs.filter(lab => lab.company.toLowerCase() === newUser.company.toLowerCase())
+    : activeLabs;
 
   // 組件加載時獲取用戶列表和實驗室列表
   useEffect(() => {
@@ -190,10 +193,8 @@ const AdminManagement = () => {
     if (user.delete_time) return false;
     const matchesSearch = user.account.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.company.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = filterRole === 'all' || user.func_permissions.includes(filterRole as Permission);
-    const matchesCompany = filterCompany === 'all' || user.company === filterCompany;
     
-    return matchesSearch && matchesRole && matchesCompany;
+    return matchesSearch;
   });
 
 
@@ -219,25 +220,12 @@ const AdminManagement = () => {
     if (!newUser.company || newUser.company.trim() === '') {
       missingFields.push('公司');
     }
-    if (!newUser.lab || newUser.lab.length === 0) {
-      missingFields.push('實驗室');
-    }
-    
     if (missingFields.length > 0) {
       alert(`請填寫以下必填欄位：${missingFields.join('、')}`);
       return;
     }
     
-    // 驗證所選實驗室是否屬於所選公司（不區分大小寫）
-    const invalidLabs = (newUser.lab || []).filter(labName => {
-      const lab = labs.find(l => l.name === labName);
-      return !lab || lab.company.toLowerCase() !== newUser.company.toLowerCase();
-    });
-    
-    if (invalidLabs.length > 0) {
-      alert(`所選的實驗室不屬於公司 "${newUser.company}"：${invalidLabs.join('、')}`);
-      return;
-    }
+    const labArray = Array.isArray(newUser.lab) ? newUser.lab : [];
     
     try {
       // 驗證新用戶的權限
@@ -261,23 +249,17 @@ const AdminManagement = () => {
       // 確保權限數組是字符串數組
       const permissionsArray = validatedPermissions.map(p => p as string);
       
-      // 確保 lab 是有效的陣列且不為空
-      if (!newUser.lab || !Array.isArray(newUser.lab) || newUser.lab.length === 0) {
-        alert('請至少選擇一個實驗室');
-        return;
-      }
-      
-      const labArray = newUser.lab;
-      
-      // 最後一次驗證：確保所有實驗室都屬於該公司
-      const invalidLabs = labArray.filter(labName => {
-        const lab = labs.find(l => l.name === labName);
-        return !lab || lab.company.toLowerCase() !== newUser.company.toLowerCase();
-      });
-      
-      if (invalidLabs.length > 0) {
-        alert(`所選的實驗室不屬於公司 "${newUser.company}"：${invalidLabs.join('、')}`);
-        return;
+      if (labArray.length > 0) {
+        // 確保所有實驗室都屬於該公司
+        const invalidLabs = labArray.filter(labName => {
+          const lab = activeLabs.find(l => l.name === labName);
+          return !lab || lab.company.toLowerCase() !== newUser.company.toLowerCase();
+        });
+        
+        if (invalidLabs.length > 0) {
+          alert(`所選的實驗室不屬於公司 "${newUser.company}"：${invalidLabs.join('、')}`);
+          return;
+        }
       }
       
       const requestBody = {
@@ -575,32 +557,6 @@ const AdminManagement = () => {
             />
           </div>
           
-          {/* 篩選器 */}
-          <div className="flex gap-2">
-            <select 
-              value={filterRole} 
-              onChange={(e) => setFilterRole(e.target.value)}
-              className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">所有角色</option>
-              {permissionOptions.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-            
-            <select 
-              value={filterCompany} 
-              onChange={(e) => setFilterCompany(e.target.value)}
-              className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">所有公司</option>
-              {/* 假設後端返回公司列表 */}
-              <option value="公司A">公司A</option>
-              <option value="公司B">公司B</option>
-              <option value="公司C">公司C</option>
-            </select>
-          </div>
-          
           {/* 新增用戶按鈕 */}
           <button
             onClick={() => setShowAddModal(true)}
@@ -730,7 +686,7 @@ const AdminManagement = () => {
                       // 當公司改變時，清空已選的實驗室（因為可能不屬於新公司）
                       const currentLabs = newUser.lab || [];
                       const validLabs = currentLabs.filter(labName => {
-                        const lab = labs.find(l => l.name === labName);
+                        const lab = activeLabs.find(l => l.name === labName);
                         return lab && lab.company.toLowerCase() === company.toLowerCase();
                       });
                       setNewUser({
@@ -744,7 +700,7 @@ const AdminManagement = () => {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    實驗室 <span className="text-red-500">*</span>
+                    實驗室
                   </label>
                   {loadingLabs ? (
                     <div className="text-sm text-gray-500">載入實驗室列表中...</div>
@@ -909,7 +865,7 @@ const AdminManagement = () => {
                 // 當公司改變時，清空已選的實驗室（因為可能不屬於新公司）
                 const currentLabs = editingUser.lab ? (Array.isArray(editingUser.lab) ? editingUser.lab : [editingUser.lab]) : [];
                 const validLabs = currentLabs.filter(labName => {
-                  const lab = labs.find(l => l.name === labName);
+                  const lab = activeLabs.find(l => l.name === labName);
                   return lab && lab.company.toLowerCase() === company.toLowerCase();
                 });
                 setEditingUser({
@@ -923,7 +879,7 @@ const AdminManagement = () => {
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              實驗室 <span className="text-red-500">*</span>
+              實驗室
             </label>
             {loadingLabs ? (
               <div className="text-sm text-gray-500">載入實驗室列表中...</div>
@@ -931,7 +887,7 @@ const AdminManagement = () => {
               <div className="border border-gray-300 rounded px-3 py-2 max-h-32 overflow-y-auto">
                 {(() => {
                   // 過濾出屬於當前公司的實驗室
-                  const companyLabs = labs.filter(lab => 
+                  const companyLabs = activeLabs.filter(lab => 
                     lab.company.toLowerCase() === (editingUser.company || '').toLowerCase()
                   );
                   

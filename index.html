@@ -9,8 +9,7 @@
       // 根據已登入資訊動態設定標題與 favicon
       (function () {
         try {
-          var company = localStorage.getItem('company_name') || localStorage.getItem('company') || 'NCCU';
-          var appName = (company ? company + ' 實驗室監控平台' : '實驗室環境監控平台');
+          var appName = '實驗室監控平台';
           document.title = appName;
           // 可選：若有自訂圖標，亦可於 localStorage 設定 favicon_url
           var faviconUrl = localStorage.getItem('favicon_url') || '/vite.svg';

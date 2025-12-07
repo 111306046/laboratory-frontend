@@ -2,7 +2,6 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" id="app-favicon" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>實驗室環境監控平台</title>
     <script>
@@ -11,12 +10,6 @@
         try {
           var appName = '實驗室監控平台';
           document.title = appName;
-          // 可選：若有自訂圖標，亦可於 localStorage 設定 favicon_url
-          var faviconUrl = localStorage.getItem('favicon_url') || '/vite.svg';
-          var link = document.getElementById('app-favicon');
-          if (link && faviconUrl) {
-            link.href = faviconUrl;
-          }
         } catch (e) {}
       })();
     </script>
